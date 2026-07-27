@@ -1,0 +1,306 @@
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- FPS Variables
+local normalFPS = 60
+local customFPS = 1
+local currentFPS = normalFPS
+local isCustomFPS = false
+
+-- Anti-AFK Variables
+local antiAfkEnabled = true
+local antiAfkBusy = false
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "FPS_AntiAFK_Gui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Main Frame (Singurul element draggable)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 260, 0, 310)
+MainFrame.Position = UDim2.new(0.5, -130, 0.4, -155)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 10)
+MainCorner.Parent = MainFrame
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Thickness = 1.5
+MainStroke.Color = Color3.fromRGB(0, 170, 255)
+MainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+MainStroke.Parent = MainFrame
+
+local MainPadding = Instance.new("UIPadding")
+MainPadding.PaddingTop = UDim.new(0, 12)
+MainPadding.PaddingBottom = UDim.new(0, 12)
+MainPadding.PaddingLeft = UDim.new(0, 12)
+MainPadding.PaddingRight = UDim.new(0, 12)
+MainPadding.Parent = MainFrame
+
+local MainLayout = Instance.new("UIListLayout")
+MainLayout.SortOrder = Enum.SortOrder.LayoutOrder
+MainLayout.Padding = UDim.new(0, 10)
+MainLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+MainLayout.Parent = MainFrame
+
+-- Title
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Name = "TitleLabel"
+TitleLabel.Size = UDim2.new(1, 0, 0, 25)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.Text = "FPS & Anti-AFK"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.TextSize = 18
+TitleLabel.LayoutOrder = 1
+TitleLabel.Parent = MainFrame
+
+-- FPS Container
+local FPSFrame = Instance.new("Frame")
+FPSFrame.Name = "FPSFrame"
+FPSFrame.Size = UDim2.new(1, 0, 0, 95)
+FPSFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+FPSFrame.BorderSizePixel = 0
+FPSFrame.LayoutOrder = 2
+FPSFrame.Parent = MainFrame
+
+local FPSCorner = Instance.new("UICorner")
+FPSCorner.CornerRadius = UDim.new(0, 8)
+FPSCorner.Parent = FPSFrame
+
+local FPSLayout = Instance.new("UIListLayout")
+FPSLayout.SortOrder = Enum.SortOrder.LayoutOrder
+FPSLayout.Padding = UDim.new(0, 8)
+FPSLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+FPSLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+FPSLayout.Parent = FPSFrame
+
+local FPSToggleButton = Instance.new("TextButton")
+FPSToggleButton.Name = "FPSToggleButton"
+FPSToggleButton.Size = UDim2.new(0.9, 0, 0, 40)
+FPSToggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+FPSToggleButton.Font = Enum.Font.GothamSemibold
+FPSToggleButton.Text = "FPS: Normal\nClick: 1 FPS"
+FPSToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+FPSToggleButton.TextSize = 13
+FPSToggleButton.LayoutOrder = 1
+FPSToggleButton.Parent = FPSFrame
+
+local FPSToggleCorner = Instance.new("UICorner")
+FPSToggleCorner.CornerRadius = UDim.new(0, 6)
+FPSToggleCorner.Parent = FPSToggleButton
+
+local FPSInput = Instance.new("TextBox")
+FPSInput.Name = "FPSInput"
+FPSInput.Size = UDim2.new(0.9, 0, 0, 30)
+FPSInput.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+FPSInput.Font = Enum.Font.Gotham
+FPSInput.Text = "1"
+FPSInput.PlaceholderText = "Enter FPS (1-360)"
+FPSInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+FPSInput.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
+FPSInput.TextSize = 12
+FPSInput.ClearTextOnFocus = false
+FPSInput.LayoutOrder = 2
+FPSInput.Parent = FPSFrame
+
+local FPSInputCorner = Instance.new("UICorner")
+FPSInputCorner.CornerRadius = UDim.new(0, 6)
+FPSInputCorner.Parent = FPSInput
+
+-- Anti-AFK Container
+local AfkFrame = Instance.new("Frame")
+AfkFrame.Name = "AfkFrame"
+AfkFrame.Size = UDim2.new(1, 0, 0, 115)
+AfkFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+AfkFrame.BorderSizePixel = 0
+AfkFrame.LayoutOrder = 3
+AfkFrame.Parent = MainFrame
+
+local AfkCorner = Instance.new("UICorner")
+AfkCorner.CornerRadius = UDim.new(0, 8)
+AfkCorner.Parent = AfkFrame
+
+local AfkLayout = Instance.new("UIListLayout")
+AfkLayout.SortOrder = Enum.SortOrder.LayoutOrder
+AfkLayout.Padding = UDim.new(0, 8)
+AfkLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+AfkLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+AfkLayout.Parent = AfkFrame
+
+local AfkStatusLabel = Instance.new("TextLabel")
+AfkStatusLabel.Name = "AfkStatusLabel"
+AfkStatusLabel.Size = UDim2.new(0.9, 0, 0, 35)
+AfkStatusLabel.BackgroundTransparency = 1
+AfkStatusLabel.Font = Enum.Font.GothamMedium
+AfkStatusLabel.Text = "Anti-AFK: ON"
+AfkStatusLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
+AfkStatusLabel.TextSize = 12
+AfkStatusLabel.TextWrapped = true
+AfkStatusLabel.LayoutOrder = 1
+AfkStatusLabel.Parent = AfkFrame
+
+local AfkToggleButton = Instance.new("TextButton")
+AfkToggleButton.Name = "AfkToggleButton"
+AfkToggleButton.Size = UDim2.new(0.9, 0, 0, 35)
+AfkToggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+AfkToggleButton.Font = Enum.Font.GothamBold
+AfkToggleButton.Text = "Anti-AFK: ENABLED"
+AfkToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+AfkToggleButton.TextSize = 13
+AfkToggleButton.LayoutOrder = 2
+AfkToggleButton.Parent = AfkFrame
+
+local AfkToggleCorner = Instance.new("UICorner")
+AfkToggleCorner.CornerRadius = UDim.new(0, 6)
+AfkToggleCorner.Parent = AfkToggleButton
+
+-- Footer / Credits
+local CreditsLabel = Instance.new("TextLabel")
+CreditsLabel.Name = "CreditsLabel"
+CreditsLabel.Size = UDim2.new(1, 0, 0, 15)
+CreditsLabel.BackgroundTransparency = 1
+CreditsLabel.Font = Enum.Font.Gotham
+CreditsLabel.Text = "Made by kello_19"
+CreditsLabel.TextColor3 = Color3.fromRGB(120, 120, 130)
+CreditsLabel.TextSize = 10
+CreditsLabel.LayoutOrder = 4
+CreditsLabel.Parent = MainFrame
+
+local function makeDraggable(frame)
+    local dragging = false
+    local dragInput, dragStart, startPos
+
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+end
+
+makeDraggable(MainFrame)
+
+local function applyFPSCap(value)
+    if setfpscap then
+        setfpscap(value)
+    end
+end
+
+local function validateFPSInput()
+    local newFPS = tonumber(FPSInput.Text)
+    if newFPS and newFPS > 0 and newFPS <= 360 then
+        customFPS = math.floor(newFPS)
+    end
+    FPSInput.Text = tostring(customFPS)
+end
+
+local function updateFPSUI()
+    if isCustomFPS then
+        applyFPSCap(customFPS)
+        currentFPS = customFPS
+        FPSToggleButton.Text = "FPS: " .. customFPS .. "\nClick: Normal"
+        FPSToggleButton.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+    else
+        applyFPSCap(normalFPS)
+        currentFPS = normalFPS
+        FPSToggleButton.Text = "FPS: Normal\nClick: " .. customFPS .. " FPS"
+        FPSToggleButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    end
+end
+
+local function toggleFPS()
+    validateFPSInput()
+    isCustomFPS = not isCustomFPS
+    updateFPSUI()
+end
+
+local function toggleAntiAfk()
+    antiAfkEnabled = not antiAfkEnabled
+    
+    if antiAfkEnabled then
+        AfkToggleButton.Text = "Anti-AFK: ENABLED"
+        AfkToggleButton.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+        if not antiAfkBusy then
+            AfkStatusLabel.Text = "Anti-AFK: ON"
+            AfkStatusLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
+        end
+    else
+        AfkToggleButton.Text = "Anti-AFK: DISABLED"
+        AfkToggleButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+        AfkStatusLabel.Text = "Anti-AFK: OFF"
+        AfkStatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    end
+end
+
+local function handleIdled()
+    if not antiAfkEnabled then 
+        return 
+    end
+    
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new(0, 0))
+    
+    antiAfkBusy = true
+    AfkStatusLabel.Text = "Roblox tried kicking you but I didn't let them!"
+    AfkStatusLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+    
+    task.wait(3)
+    
+    antiAfkBusy = false
+    if antiAfkEnabled then
+        AfkStatusLabel.Text = "Anti-AFK: ON"
+        AfkStatusLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
+    end
+end
+
+FPSToggleButton.MouseButton1Click:Connect(toggleFPS)
+FPSToggleButton.TouchTap:Connect(toggleFPS)
+
+FPSInput.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        validateFPSInput()
+        updateFPSUI()
+    end
+end)
+
+AfkToggleButton.MouseButton1Click:Connect(toggleAntiAfk)
+AfkToggleButton.TouchTap:Connect(toggleAntiAfk)
+
+LocalPlayer.Idled:Connect(handleIdled)
