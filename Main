@@ -16,15 +16,17 @@ local scriptRunning = true
 local antiAfkEnabled = true
 local autoMerchantEnabled = true
 local autoCollectEnabled = false
+local autoHatchEnabled = false
+local autoGiftsEnabled = false
 local disable3DRendering = false
 local potatoModeEnabled = false
 local uiVisible = true
 local currentToggleKey = Enum.KeyCode.Insert
 local isListeningForKey = false
 
+local currentEggId = "c7a017c085ba46e68ea058182fd269f0"
 local cachedPlotIdArg = nil
 
--- Theme Colors
 local C_BG = Color3.fromRGB(15, 15, 20)
 local C_SIDEBAR = Color3.fromRGB(22, 22, 29)
 local C_CARD = Color3.fromRGB(28, 28, 38)
@@ -34,7 +36,6 @@ local C_DANGER = Color3.fromRGB(231, 76, 60)
 local C_TEXT = Color3.fromRGB(255, 255, 255)
 local C_SUBTEXT = Color3.fromRGB(180, 185, 200)
 
--- Metatable Hooking for Plot ID Capture
 pcall(function()
     local network = ReplicatedStorage:WaitForChild("Network", 5)
     if not network then return end
@@ -55,7 +56,110 @@ pcall(function()
     end)
 end)
 
--- Main UI Setup
+local function setPlayerFrozen(freeze)
+    local character = LocalPlayer.Character
+    if not character then return end
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if root then
+        root.Anchored = freeze
+    end
+end
+
+local function tpToEgg(eggId)
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+
+    local targetEgg = nil
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name == eggId or obj:GetAttribute("EggId") == eggId or (obj:IsA("Model") and string.find(obj.Name, "Garden")) then
+            targetEgg = obj
+            break
+        end
+    end
+
+    if targetEgg then
+        local eggCFrame = targetEgg:IsA("Model") and targetEgg:GetPrimaryPartCFrame() or targetEgg.CFrame
+        if eggCFrame then
+            local frontPosition = eggCFrame * CFrame.new(0, 0, -4)
+            character.HumanoidRootPart.CFrame = CFrame.lookAt(frontPosition.Position, eggCFrame.Position)
+        end
+    end
+end
+
+local function doHatchSequence(eggId)
+    local network = ReplicatedStorage:FindFirstChild("Network")
+    if not network then return end
+
+    local clickRemote = network:FindFirstChild("Click")
+    local hatchRemote = network:FindFirstChild("CustomEggs_Hatch")
+    local reqHatchRemote = network:FindFirstChild("Index: Request Hatch Count")
+
+    if clickRemote then
+        local char = LocalPlayer.Character
+        local headPos = (char and char:FindFirstChild("Head")) and char.Head.Position or Vector3.new(1295.3, 259.0, -2361.4)
+        local targetPos = Vector3.new(1315.8, 240.0, -2352.3)
+        local dir = (targetPos - headPos).Unit
+
+        for i = 1, 3 do
+            pcall(function()
+                clickRemote:FireServer(Ray.new(headPos, dir), targetPos)
+            end)
+            task.wait(0.05)
+        end
+    end
+
+    local userMaxHatch = nil
+    if reqHatchRemote then
+        pcall(function()
+            userMaxHatch = reqHatchRemote:InvokeServer()
+        end)
+    end
+
+    if type(userMaxHatch) ~= "number" or userMaxHatch <= 0 then
+        userMaxHatch = 52
+    end
+
+    if hatchRemote then
+        pcall(function()
+            hatchRemote:InvokeServer(eggId, userMaxHatch)
+        end)
+    end
+
+    task.wait(0.15)
+    local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
+    local centerX = viewport.X / 2
+    local centerY = viewport.Y / 2
+
+    for i = 1, 5 do
+        pcall(function()
+            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
+            task.wait(0.02)
+            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
+        end)
+        task.wait(0.04)
+    end
+end
+
+local function autoCollectFreeGifts()
+    if not autoGiftsEnabled or not scriptRunning then return end
+    
+    local network = ReplicatedStorage:FindFirstChild("Network")
+    if not network then return end
+    
+    local redeemRemote = network:FindFirstChild("Redeem Free Gift")
+    if not redeemRemote then return end
+
+    for slot = 1, 12 do
+        if not scriptRunning or not autoGiftsEnabled then break end
+
+        pcall(function()
+            redeemRemote:InvokeServer(slot)
+        end)
+
+        task.wait(0.2)
+    end
+end
+
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "ProjectReligieUI"
 ScreenGui.ResetOnSpawn = false
@@ -76,8 +180,8 @@ BlackOverlay.Parent = ScreenGui
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 620, 0, 400)
-MainFrame.Position = UDim2.new(0.5, -310, 0.5, -200)
+MainFrame.Size = UDim2.new(0, 620, 0, 420)
+MainFrame.Position = UDim2.new(0.5, -310, 0.5, -210)
 MainFrame.BackgroundColor3 = C_BG
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
@@ -146,7 +250,7 @@ SidebarTitle.Size = UDim2.new(1, -48, 1, 0)
 SidebarTitle.Position = UDim2.new(0, 44, 0, 0)
 SidebarTitle.BackgroundTransparency = 1
 SidebarTitle.Font = Enum.Font.GothamBold
-SidebarTitle.Text = "Project Religie"
+SidebarTitle.Text = "Project Religion"
 SidebarTitle.TextColor3 = C_TEXT
 SidebarTitle.TextSize = 15
 SidebarTitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -244,6 +348,13 @@ local Tabs = {
 
 local TabButtons = {}
 
+local tabIcons = {
+    Dashboard = "📊 ",
+    Automation = "⚡ ",
+    Graphics = "🎨 ",
+    Settings = "⚙️ "
+}
+
 local function createTab(name, layoutOrder)
     local frame = Tabs[name]
     frame.Name = name .. "Tab"
@@ -254,7 +365,7 @@ local function createTab(name, layoutOrder)
 
     local layout = Instance.new("UIListLayout")
     layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding = UDim.new(0, 12)
+    layout.Padding = UDim.new(0, 10)
     layout.Parent = frame
 
     local btn = Instance.new("TextButton")
@@ -263,7 +374,7 @@ local function createTab(name, layoutOrder)
     btn.BackgroundColor3 = C_CARD
     btn.BackgroundTransparency = 1
     btn.Font = Enum.Font.GothamBold
-    btn.Text = name
+    btn.Text = (tabIcons[name] or "") .. name
     btn.TextColor3 = C_SUBTEXT
     btn.TextSize = 13
     btn.LayoutOrder = layoutOrder
@@ -318,8 +429,7 @@ local function createCard(parent, titleText, sizeY)
     return card
 end
 
--- Dashboard Components
-local afkCard = createCard(Tabs.Dashboard, "ANTI-AFK SYSTEM", 75)
+local afkCard = createCard(Tabs.Dashboard, "🛡️ ANTI-AFK SYSTEM", 75)
 local afkStatusLabel = Instance.new("TextLabel")
 afkStatusLabel.Size = UDim2.new(0.60, -15, 0, 34)
 afkStatusLabel.Position = UDim2.new(0, 12, 0, 32)
@@ -344,7 +454,7 @@ afkBtn.TextSize = 12
 afkBtn.Parent = afkCard
 Instance.new("UICorner", afkBtn).CornerRadius = UDim.new(0, 8)
 
-local fpsCard = createCard(Tabs.Dashboard, "FPS LIMITER", 78)
+local fpsCard = createCard(Tabs.Dashboard, "⏱️ FPS LIMITER", 78)
 local fpsBtn = Instance.new("TextButton")
 fpsBtn.Size = UDim2.new(0.48, -5, 0, 30)
 fpsBtn.Position = UDim2.new(0, 12, 0, 36)
@@ -368,8 +478,57 @@ fpsInput.TextSize = 13
 fpsInput.Parent = fpsCard
 Instance.new("UICorner", fpsInput).CornerRadius = UDim.new(0, 8)
 
--- Automation Components
-local merchantCard = createCard(Tabs.Automation, "AUTO FARMING MERCHANT", 78)
+local autoHatchCard = createCard(Tabs.Automation, "🥚 AUTO HATCH GARDEN EGG", 78)
+local autoHatchDesc = Instance.new("TextLabel")
+autoHatchDesc.Size = UDim2.new(0.60, -15, 0, 38)
+autoHatchDesc.Position = UDim2.new(0, 12, 0, 30)
+autoHatchDesc.BackgroundTransparency = 1
+autoHatchDesc.Font = Enum.Font.GothamMedium
+autoHatchDesc.Text = "Teleports to Garden Egg and continuously hatches."
+autoHatchDesc.TextColor3 = C_SUBTEXT
+autoHatchDesc.TextSize = 12
+autoHatchDesc.TextWrapped = true
+autoHatchDesc.TextXAlignment = Enum.TextXAlignment.Left
+autoHatchDesc.TextYAlignment = Enum.TextYAlignment.Center
+autoHatchDesc.Parent = autoHatchCard
+
+local autoHatchBtn = Instance.new("TextButton")
+autoHatchBtn.Size = UDim2.new(0.35, 0, 0, 30)
+autoHatchBtn.Position = UDim2.new(0.62, 0, 0, 34)
+autoHatchBtn.BackgroundColor3 = C_DANGER
+autoHatchBtn.Font = Enum.Font.GothamBold
+autoHatchBtn.Text = "DISABLED"
+autoHatchBtn.TextColor3 = C_TEXT
+autoHatchBtn.TextSize = 12
+autoHatchBtn.Parent = autoHatchCard
+Instance.new("UICorner", autoHatchBtn).CornerRadius = UDim.new(0, 8)
+
+local giftsCard = createCard(Tabs.Automation, "🎁 AUTO COLLECT FREE GIFTS", 78)
+local giftsDesc = Instance.new("TextLabel")
+giftsDesc.Size = UDim2.new(0.60, -15, 0, 38)
+giftsDesc.Position = UDim2.new(0, 12, 0, 30)
+giftsDesc.BackgroundTransparency = 1
+giftsDesc.Font = Enum.Font.GothamMedium
+giftsDesc.Text = "Automatically redeems all 12 free gifts periodically."
+giftsDesc.TextColor3 = C_SUBTEXT
+giftsDesc.TextSize = 12
+giftsDesc.TextWrapped = true
+giftsDesc.TextXAlignment = Enum.TextXAlignment.Left
+giftsDesc.TextYAlignment = Enum.TextYAlignment.Center
+giftsDesc.Parent = giftsCard
+
+local giftsBtn = Instance.new("TextButton")
+giftsBtn.Size = UDim2.new(0.35, 0, 0, 30)
+giftsBtn.Position = UDim2.new(0.62, 0, 0, 34)
+giftsBtn.BackgroundColor3 = C_DANGER
+giftsBtn.Font = Enum.Font.GothamBold
+giftsBtn.Text = "DISABLED"
+giftsBtn.TextColor3 = C_TEXT
+giftsBtn.TextSize = 12
+giftsBtn.Parent = giftsCard
+Instance.new("UICorner", giftsBtn).CornerRadius = UDim.new(0, 8)
+
+local merchantCard = createCard(Tabs.Automation, "🛒 AUTO FARMING MERCHANT", 78)
 local merchantDesc = Instance.new("TextLabel")
 merchantDesc.Size = UDim2.new(0.60, -15, 0, 38)
 merchantDesc.Position = UDim2.new(0, 12, 0, 30)
@@ -394,7 +553,7 @@ merchantBtn.TextSize = 12
 merchantBtn.Parent = merchantCard
 Instance.new("UICorner", merchantBtn).CornerRadius = UDim.new(0, 8)
 
-local collectCard = createCard(Tabs.Automation, "AUTO COLLECT PLOTS", 78)
+local collectCard = createCard(Tabs.Automation, "🌱 AUTO COLLECT PLOTS", 78)
 local collectDesc = Instance.new("TextLabel")
 collectDesc.Size = UDim2.new(0.60, -15, 0, 38)
 collectDesc.Position = UDim2.new(0, 12, 0, 30)
@@ -419,8 +578,7 @@ collectBtn.TextSize = 12
 collectBtn.Parent = collectCard
 Instance.new("UICorner", collectBtn).CornerRadius = UDim.new(0, 8)
 
--- Graphics Components
-local render3dCard = createCard(Tabs.Graphics, "DISABLE 3D RENDERING", 75)
+local render3dCard = createCard(Tabs.Graphics, "🖥️ DISABLE 3D RENDERING", 75)
 local render3dDesc = Instance.new("TextLabel")
 render3dDesc.Size = UDim2.new(0.55, -15, 0, 38)
 render3dDesc.Position = UDim2.new(0, 12, 0, 28)
@@ -445,7 +603,7 @@ render3dBtn.TextSize = 11
 render3dBtn.Parent = render3dCard
 Instance.new("UICorner", render3dBtn).CornerRadius = UDim.new(0, 8)
 
-local potatoCard = createCard(Tabs.Graphics, "POTATO MODE (DESTRUCTIVE)", 75)
+local potatoCard = createCard(Tabs.Graphics, "🥔 POTATO MODE (DESTRUCTIVE)", 75)
 local potatoDesc = Instance.new("TextLabel")
 potatoDesc.Size = UDim2.new(0.55, -15, 0, 38)
 potatoDesc.Position = UDim2.new(0, 12, 0, 28)
@@ -470,8 +628,7 @@ potatoBtn.TextSize = 12
 potatoBtn.Parent = potatoCard
 Instance.new("UICorner", potatoBtn).CornerRadius = UDim.new(0, 8)
 
--- Settings Components
-local keybindCard = createCard(Tabs.Settings, "MENU TOGGLE KEYBIND", 75)
+local keybindCard = createCard(Tabs.Settings, "⌨️ MENU TOGGLE KEYBIND", 75)
 local keybindDesc = Instance.new("TextLabel")
 keybindDesc.Size = UDim2.new(0.55, -15, 0, 38)
 keybindDesc.Position = UDim2.new(0, 12, 0, 28)
@@ -496,7 +653,7 @@ keybindBtn.TextSize = 12
 keybindBtn.Parent = keybindCard
 Instance.new("UICorner", keybindBtn).CornerRadius = UDim.new(0, 8)
 
-local unloadCard = createCard(Tabs.Settings, "UNLOAD SCRIPT", 75)
+local unloadCard = createCard(Tabs.Settings, "🚪 UNLOAD SCRIPT", 75)
 local unloadDesc = Instance.new("TextLabel")
 unloadDesc.Size = UDim2.new(0.55, -15, 0, 38)
 unloadDesc.Position = UDim2.new(0, 12, 0, 28)
@@ -521,7 +678,6 @@ unloadBtn.TextSize = 12
 unloadBtn.Parent = unloadCard
 Instance.new("UICorner", unloadBtn).CornerRadius = UDim.new(0, 8)
 
--- Modal Warning Overlay
 local ModalOverlay = Instance.new("Frame")
 ModalOverlay.Name = "ModalOverlay"
 ModalOverlay.Size = UDim2.new(1, 0, 1, 0)
@@ -621,7 +777,6 @@ ModalNo.MouseButton1Click:Connect(function()
     ModalOverlay.Visible = false
 end)
 
--- Window Dragging Logic
 local function makeDraggable(frame)
     local dragging, dragInput, dragStart, startPos
     frame.InputBegan:Connect(function(input)
@@ -648,7 +803,6 @@ local function makeDraggable(frame)
 end
 makeDraggable(MainFrame)
 
--- Keybind Rebind Listener
 keybindBtn.MouseButton1Click:Connect(function()
     isListeningForKey = true
     keybindBtn.Text = "Press Any Key..."
@@ -675,7 +829,6 @@ inputConnection = UserInputService.InputBegan:Connect(function(input, gameProces
     end
 end)
 
--- Button Actions & Controls
 local function applyFPSCap(val) if setfpscap then setfpscap(val) end end
 local function validateFPSInput()
     local n = tonumber(fpsInput.Text)
@@ -707,6 +860,33 @@ afkBtn.MouseButton1Click:Connect(function()
     afkBtn.BackgroundColor3 = antiAfkEnabled and C_SUCCESS or C_DANGER
     afkStatusLabel.Text = antiAfkEnabled and "Status: Active" or "Status: Disabled"
     afkStatusLabel.TextColor3 = antiAfkEnabled and C_SUCCESS or C_DANGER
+end)
+
+autoHatchBtn.MouseButton1Click:Connect(function()
+    autoHatchEnabled = not autoHatchEnabled
+    if autoHatchEnabled then
+        autoHatchBtn.Text = "ENABLED"
+        autoHatchBtn.BackgroundColor3 = C_SUCCESS
+        tpToEgg(currentEggId)
+        task.wait(0.1)
+        setPlayerFrozen(true)
+    else
+        autoHatchBtn.Text = "DISABLED"
+        autoHatchBtn.BackgroundColor3 = C_DANGER
+        setPlayerFrozen(false)
+    end
+end)
+
+giftsBtn.MouseButton1Click:Connect(function()
+    autoGiftsEnabled = not autoGiftsEnabled
+    if autoGiftsEnabled then
+        giftsBtn.Text = "ENABLED"
+        giftsBtn.BackgroundColor3 = C_SUCCESS
+        task.spawn(autoCollectFreeGifts)
+    else
+        giftsBtn.Text = "DISABLED"
+        giftsBtn.BackgroundColor3 = C_DANGER
+    end
 end)
 
 merchantBtn.MouseButton1Click:Connect(function()
@@ -772,6 +952,9 @@ unloadBtn.MouseButton1Click:Connect(function()
     antiAfkEnabled = false
     autoMerchantEnabled = false
     autoCollectEnabled = false
+    autoHatchEnabled = false
+    autoGiftsEnabled = false
+    setPlayerFrozen(false)
     
     RunService:Set3dRenderingEnabled(true)
     applyFPSCap(normalFPS)
@@ -783,7 +966,6 @@ unloadBtn.MouseButton1Click:Connect(function()
     ScreenGui:Destroy()
 end)
 
--- Merchant Logic
 local function autoBuyMerchant()
     if not autoMerchantEnabled or not scriptRunning then return end
     local network = ReplicatedStorage:FindFirstChild("Network")
@@ -807,7 +989,6 @@ local function autoBuyMerchant()
     end
 end
 
--- Plot Collection Logic
 local function autoCollectPlots()
     if not autoCollectEnabled or not scriptRunning or not cachedPlotIdArg then return end
     local network = ReplicatedStorage:FindFirstChild("Network")
@@ -853,7 +1034,24 @@ collectBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Main Loops
+task.spawn(function()
+    while scriptRunning do
+        if autoHatchEnabled then
+            doHatchSequence(currentEggId)
+        end
+        task.wait(0.5)
+    end
+end)
+
+task.spawn(function()
+    while scriptRunning do
+        if autoGiftsEnabled then
+            autoCollectFreeGifts()
+        end
+        task.wait(45)
+    end
+end)
+
 task.spawn(function()
     while scriptRunning do
         task.wait(30)
