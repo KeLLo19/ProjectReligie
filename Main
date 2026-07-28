@@ -249,6 +249,7 @@ SidebarTitle.Position = UDim2.new(0, 44, 0, 0)
 SidebarTitle.BackgroundTransparency = 1
 SidebarTitle.Font = Enum.Font.GothamBold
 SidebarTitle.Text = "Project Religie"
+
 SidebarTitle.TextColor3 = C_TEXT
 SidebarTitle.TextSize = 15
 SidebarTitle.TextXAlignment = Enum.TextXAlignment.Left
