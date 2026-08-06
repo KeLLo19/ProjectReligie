@@ -4,164 +4,190 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+local Stats = game:GetService("Stats")
 
 local LocalPlayer = Players.LocalPlayer
 
+local DEVS_JSON_URL = "https://raw.githubusercontent.com/KeLLo19/K-Hub/refs/heads/main/devs.json"
+
 local normalFPS = 60
 local customFPS = 1
-local currentFPS = normalFPS
 local isCustomFPS = false
 
 local scriptRunning = true
-local antiAfkEnabled = true
-local autoMerchantEnabled = true
-local autoCollectEnabled = false
-local autoHatchEnabled = false
+local antiAfkEnabled = false
+local autoMerchantEnabled = false
 local autoGiftsEnabled = false
+local autoJoinEventEnabled = false
 local disable3DRendering = false
 local potatoModeEnabled = false
-local uiVisible = true
+local uiVisible = true 
 local currentToggleKey = Enum.KeyCode.Insert
 local isListeningForKey = false
-
-local currentEggId = nil
-local cachedPlotIdArg = nil
+local isColorPickerOpen = false
 
 local C_BG = Color3.fromRGB(15, 15, 20)
 local C_SIDEBAR = Color3.fromRGB(22, 22, 29)
 local C_CARD = Color3.fromRGB(28, 28, 38)
+local C_PROFILE = Color3.fromRGB(18, 18, 25)
 local C_ACCENT = Color3.fromRGB(114, 137, 218)
+local C_BUTTON = Color3.fromRGB(114, 137, 218)
 local C_SUCCESS = Color3.fromRGB(46, 204, 113)
 local C_DANGER = Color3.fromRGB(231, 76, 60)
 local C_TEXT = Color3.fromRGB(255, 255, 255)
-local C_SUBTEXT = Color3.fromRGB(180, 185, 200)
+local C_SUBTEXT = Color3.fromRGB(190, 195, 210)
+local C_SECTION_HEADER = Color3.fromRGB(114, 137, 218)
+local C_STATBOX = Color3.fromRGB(18, 18, 25) 
+local C_DASHBOARD_LIVE = Color3.fromRGB(18, 18, 25)
+local C_CONTAINERS = Color3.fromRGB(18, 18, 26)
+local C_PRESET_SELECTION = Color3.fromRGB(24, 24, 34)
+local C_CONFIG_SELECTION = Color3.fromRGB(24, 24, 34)
 
-pcall(function()
-    local network = ReplicatedStorage:WaitForChild("Network", 5)
-    if not network then return end
-    
-    local plotsInvoke = network:WaitForChild("Plots_Invoke", 5)
-    if plotsInvoke then
-        local oldNamecall
-        oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-            local args = {...}
-            local method = getnamecallmethod()
-            
-            if self == plotsInvoke and (method == "InvokeServer" or method == "invokeServer") then
-                if args[2] == "SD_Collect" and type(args[1]) == "number" then
-                    cachedPlotIdArg = args[1]
+local containerFramesList = {}
+
+local SETTINGS_FILE_NAME = "KHub_ThemePresets.json"
+
+local savedThemePresets = {
+    ["Default Dark"] = {BG = Color3.fromRGB(15, 15, 20), SIDEBAR = Color3.fromRGB(22, 22, 29), CARD = Color3.fromRGB(28, 28, 38), PROFILE = Color3.fromRGB(18, 18, 25), ACCENT = Color3.fromRGB(114, 137, 218), BUTTON = Color3.fromRGB(114, 137, 218), SECTION_HEADER = Color3.fromRGB(114, 137, 218), STATBOX = Color3.fromRGB(18, 18, 25), DASHBOARD_LIVE = Color3.fromRGB(18, 18, 25), CONTAINERS = Color3.fromRGB(38, 38, 52), PRESET_SELECTION = Color3.fromRGB(24, 24, 34), CONFIG_SELECTION = Color3.fromRGB(24, 24, 34)},
+    ["Midnight Blue"] = {BG = Color3.fromRGB(10, 12, 25), SIDEBAR = Color3.fromRGB(16, 18, 35), CARD = Color3.fromRGB(22, 25, 48), PROFILE = Color3.fromRGB(14, 16, 30), ACCENT = Color3.fromRGB(52, 152, 219), BUTTON = Color3.fromRGB(52, 152, 219), SECTION_HEADER = Color3.fromRGB(52, 152, 219), STATBOX = Color3.fromRGB(14, 16, 30), DASHBOARD_LIVE = Color3.fromRGB(14, 16, 30), CONTAINERS = Color3.fromRGB(32, 38, 70), PRESET_SELECTION = Color3.fromRGB(18, 22, 42), CONFIG_SELECTION = Color3.fromRGB(18, 22, 42)},
+    ["Dark Slate"] = {BG = Color3.fromRGB(20, 20, 20), SIDEBAR = Color3.fromRGB(30, 30, 30), CARD = Color3.fromRGB(40, 40, 40), PROFILE = Color3.fromRGB(25, 25, 25), ACCENT = Color3.fromRGB(46, 204, 113), BUTTON = Color3.fromRGB(46, 204, 113), SECTION_HEADER = Color3.fromRGB(46, 204, 113), STATBOX = Color3.fromRGB(25, 25, 25), DASHBOARD_LIVE = Color3.fromRGB(25, 25, 25), CONTAINERS = Color3.fromRGB(55, 55, 55), PRESET_SELECTION = Color3.fromRGB(35, 35, 35), CONFIG_SELECTION = Color3.fromRGB(35, 35, 35)},
+    ["Cyberpunk Neon"] = {BG = Color3.fromRGB(12, 10, 20), SIDEBAR = Color3.fromRGB(20, 15, 32), CARD = Color3.fromRGB(28, 22, 45), PROFILE = Color3.fromRGB(18, 14, 30), ACCENT = Color3.fromRGB(255, 0, 127), BUTTON = Color3.fromRGB(255, 0, 127), SECTION_HEADER = Color3.fromRGB(255, 0, 127), STATBOX = Color3.fromRGB(18, 14, 30), DASHBOARD_LIVE = Color3.fromRGB(18, 14, 30), CONTAINERS = Color3.fromRGB(45, 30, 65), PRESET_SELECTION = Color3.fromRGB(22, 16, 38), CONFIG_SELECTION = Color3.fromRGB(22, 16, 38)},
+    ["Emerald Forest"] = {BG = Color3.fromRGB(10, 18, 14), SIDEBAR = Color3.fromRGB(15, 26, 20), CARD = Color3.fromRGB(22, 38, 28), PROFILE = Color3.fromRGB(14, 22, 17), ACCENT = Color3.fromRGB(46, 204, 113), BUTTON = Color3.fromRGB(46, 204, 113), SECTION_HEADER = Color3.fromRGB(46, 204, 113), STATBOX = Color3.fromRGB(14, 22, 17), DASHBOARD_LIVE = Color3.fromRGB(14, 22, 17), CONTAINERS = Color3.fromRGB(32, 55, 40), PRESET_SELECTION = Color3.fromRGB(16, 30, 22), CONFIG_SELECTION = Color3.fromRGB(16, 30, 22)},
+    ["Sunset Orange"] = {BG = Color3.fromRGB(20, 12, 12), SIDEBAR = Color3.fromRGB(30, 18, 18), CARD = Color3.fromRGB(40, 24, 24), PROFILE = Color3.fromRGB(25, 15, 15), ACCENT = Color3.fromRGB(230, 126, 34), BUTTON = Color3.fromRGB(230, 126, 34), SECTION_HEADER = Color3.fromRGB(230, 126, 34), STATBOX = Color3.fromRGB(25, 15, 15), DASHBOARD_LIVE = Color3.fromRGB(25, 15, 15), CONTAINERS = Color3.fromRGB(58, 34, 34), PRESET_SELECTION = Color3.fromRGB(32, 20, 20), CONFIG_SELECTION = Color3.fromRGB(32, 20, 20)},
+    ["Royal Purple"] = {BG = Color3.fromRGB(15, 10, 20), SIDEBAR = Color3.fromRGB(24, 16, 32), CARD = Color3.fromRGB(34, 22, 45), PROFILE = Color3.fromRGB(20, 13, 27), ACCENT = Color3.fromRGB(155, 89, 182), BUTTON = Color3.fromRGB(155, 89, 182), SECTION_HEADER = Color3.fromRGB(155, 89, 182), STATBOX = Color3.fromRGB(20, 13, 27), DASHBOARD_LIVE = Color3.fromRGB(20, 13, 27), CONTAINERS = Color3.fromRGB(50, 32, 65), PRESET_SELECTION = Color3.fromRGB(26, 17, 36), CONFIG_SELECTION = Color3.fromRGB(26, 17, 36)},
+    ["Teal Breeze"] = {BG = Color3.fromRGB(10, 18, 20), SIDEBAR = Color3.fromRGB(15, 28, 32), CARD = Color3.fromRGB(22, 38, 44), PROFILE = Color3.fromRGB(14, 24, 27), ACCENT = Color3.fromRGB(26, 188, 156), BUTTON = Color3.fromRGB(26, 188, 156), SECTION_HEADER = Color3.fromRGB(26, 188, 156), STATBOX = Color3.fromRGB(14, 24, 27), DASHBOARD_LIVE = Color3.fromRGB(14, 24, 27), CONTAINERS = Color3.fromRGB(32, 55, 62), PRESET_SELECTION = Color3.fromRGB(16, 30, 35), CONFIG_SELECTION = Color3.fromRGB(16, 30, 35)}
+}
+
+local function loadPresetsFromFile()
+    if readfile and isfile and isfile(SETTINGS_FILE_NAME) then
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(readfile(SETTINGS_FILE_NAME))
+        end)
+        if success and type(result) == "table" then
+            for name, data in pairs(result) do
+                if data.BG and data.SIDEBAR and data.CARD and data.PROFILE and data.ACCENT then
+                    savedThemePresets[name] = {
+                        BG = Color3.new(data.BG[1], data.BG[2], data.BG[3]),
+                        SIDEBAR = Color3.new(data.SIDEBAR[1], data.SIDEBAR[2], data.SIDEBAR[3]),
+                        CARD = Color3.new(data.CARD[1], data.CARD[2], data.CARD[3]),
+                        PROFILE = Color3.new(data.PROFILE[1], data.PROFILE[2], data.PROFILE[3]),
+                        ACCENT = Color3.new(data.ACCENT[1], data.ACCENT[2], data.ACCENT[3]),
+                        BUTTON = data.BUTTON and Color3.new(data.BUTTON[1], data.BUTTON[2], data.BUTTON[3]) or Color3.new(data.ACCENT[1], data.ACCENT[2], data.ACCENT[3]),
+                        SECTION_HEADER = data.SECTION_HEADER and Color3.new(data.SECTION_HEADER[1], data.SECTION_HEADER[2], data.SECTION_HEADER[3]) or Color3.new(data.ACCENT[1], data.ACCENT[2], data.ACCENT[3]),
+                        STATBOX = data.STATBOX and Color3.new(data.STATBOX[1], data.STATBOX[2], data.STATBOX[3]) or Color3.fromRGB(18, 18, 25),
+                        DASHBOARD_LIVE = data.DASHBOARD_LIVE and Color3.new(data.DASHBOARD_LIVE[1], data.DASHBOARD_LIVE[2], data.DASHBOARD_LIVE[3]) or (data.PROFILE and Color3.new(data.PROFILE[1], data.PROFILE[2], data.PROFILE[3]) or Color3.fromRGB(18, 18, 25)),
+                        CONTAINERS = data.CONTAINERS and Color3.new(data.CONTAINERS[1], data.CONTAINERS[2], data.CONTAINERS[3]) or Color3.fromRGB(18, 18, 26),
+                        PRESET_SELECTION = data.PRESET_SELECTION and Color3.new(data.PRESET_SELECTION[1], data.PRESET_SELECTION[2], data.PRESET_SELECTION[3]) or Color3.fromRGB(24, 24, 34),
+                        CONFIG_SELECTION = data.CONFIG_SELECTION and Color3.new(data.CONFIG_SELECTION[1], data.CONFIG_SELECTION[2], data.CONFIG_SELECTION[3]) or Color3.fromRGB(24, 24, 34)
+                    }
                 end
             end
-            return oldNamecall(self, ...)
-        end)
-    end
-
-    local hatchRemote = network:WaitForChild("CustomEggs_Hatch", 5)
-    if hatchRemote then
-        local oldHatchCall
-        oldHatchCall = hookmetamethod(game, "__namecall", function(self, ...)
-            local args = {...}
-            local method = getnamecallmethod()
-            
-            if self == hatchRemote and (method == "InvokeServer" or method == "invokeServer") then
-                if type(args[1]) == "string" and #args[1] > 10 then
-                    currentEggId = args[1]
-                end
-            end
-            return oldHatchCall(self, ...)
-        end)
-    end
-end)
-
-local function setPlayerFrozen(freeze)
-    local character = LocalPlayer.Character
-    if not character then return end
-    local root = character:FindFirstChild("HumanoidRootPart")
-    if root then
-        root.Anchored = freeze
-    end
-end
-
-local function tpToEgg(eggId)
-    local character = LocalPlayer.Character
-    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
-
-    local targetEgg = nil
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj.Name == eggId or obj:GetAttribute("EggId") == eggId or (obj:IsA("Model") and string.find(string.lower(obj.Name), "garden")) then
-            targetEgg = obj
-            break
-        end
-    end
-
-    if targetEgg then
-        local eggCFrame = targetEgg:IsA("Model") and targetEgg:GetPrimaryPartCFrame() or targetEgg.CFrame
-        if eggCFrame then
-            local frontPosition = eggCFrame * CFrame.new(0, 0, -4)
-            character.HumanoidRootPart.CFrame = CFrame.lookAt(frontPosition.Position, eggCFrame.Position)
         end
     end
 end
 
-local function doHatchSequence(eggId)
-    local network = ReplicatedStorage:FindFirstChild("Network")
-    if not network then return end
+local function savePresetsToFile()
+    if writefile then
+        pcall(function()
+            local serializable = {}
+            for name, data in pairs(savedThemePresets) do
+                serializable[name] = {
+                    BG = {data.BG.R, data.BG.G, data.BG.B},
+                    SIDEBAR = {data.SIDEBAR.R, data.SIDEBAR.G, data.SIDEBAR.B},
+                    CARD = {data.CARD.R, data.CARD.G, data.CARD.B},
+                    PROFILE = {data.PROFILE.R, data.PROFILE.G, data.PROFILE.B},
+                    ACCENT = {data.ACCENT.R, data.ACCENT.G, data.ACCENT.B},
+                    BUTTON = {data.BUTTON.R, data.BUTTON.G, data.BUTTON.B},
+                    SECTION_HEADER = {data.SECTION_HEADER.R, data.SECTION_HEADER.G, data.SECTION_HEADER.B},
+                    STATBOX = {data.STATBOX.R, data.STATBOX.G, data.STATBOX.B},
+                    DASHBOARD_LIVE = {data.DASHBOARD_LIVE.R, data.DASHBOARD_LIVE.G, data.DASHBOARD_LIVE.B},
+                    CONTAINERS = {data.CONTAINERS.R, data.CONTAINERS.G, data.CONTAINERS.B},
+                    PRESET_SELECTION = {data.PRESET_SELECTION.R, data.PRESET_SELECTION.G, data.PRESET_SELECTION.B},
+                    CONFIG_SELECTION = {data.CONFIG_SELECTION.R, data.CONFIG_SELECTION.G, data.CONFIG_SELECTION.B}
+                }
+            end
+            writefile(SETTINGS_FILE_NAME, HttpService:JSONEncode(serializable))
+        end)
+    end
+end
 
-    local clickRemote = network:FindFirstChild("Click")
-    local hatchRemote = network:FindFirstChild("CustomEggs_Hatch")
-    local reqHatchRemote = network:FindFirstChild("Index: Request Hatch Count")
+loadPresetsFromFile()
 
-    if clickRemote then
-        local char = LocalPlayer.Character
-        local headPos = (char and char:FindFirstChild("Head")) and char.Head.Position or Vector3.new(1295.3, 259.0, -2361.4)
-        local targetPos = Vector3.new(1315.8, 240.0, -2352.3)
-        local dir = (targetPos - headPos).Unit
+local FONT_FREDOKA = Enum.Font.FredokaOne
+local FONT_BOLD = Enum.Font.GothamBold
+local FONT_MEDIUM = Enum.Font.GothamMedium
+local FONT_REGULAR = Enum.Font.Gotham
 
-        for i = 1, 3 do
-            pcall(function()
-                clickRemote:FireServer(Ray.new(headPos, dir), targetPos)
-            end)
+local network = ReplicatedStorage:WaitForChild("Network", 5)
+
+local function getPlayerRank()
+    local defaultRank = "Normal User"
+    local defaultColor = C_SUBTEXT
+
+    local success, response = pcall(function()
+        return game:HttpGet(DEVS_JSON_URL .. "?nocache=" .. tostring(os.time()))
+    end)
+
+    if success and response then
+        local decodeSuccess, devData = pcall(function()
+            return HttpService:JSONDecode(response)
+        end)
+
+        if decodeSuccess and type(devData) == "table" then
+            local userIdStr = tostring(LocalPlayer.UserId)
+            if devData[userIdStr] then
+                local userRole = devData[userIdStr]
+                
+                if type(userRole) == "table" then
+                    local roleName = userRole.Role or "Developer"
+                    local r = userRole.Color and userRole.Color[1] or 241
+                    local g = userRole.Color and userRole.Color[2] or 196
+                    local b = userRole.Color and userRole.Color[3] or 15
+                    return roleName, Color3.fromRGB(r, g, b)
+                else
+                    return tostring(userRole), Color3.fromRGB(241, 196, 15)
+                end
+            end
+        end
+    end
+
+    return defaultRank, defaultColor
+end
+
+local function triggerJoinEvent()
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return end
+
+    local mainLeft = playerGui:FindFirstChild("MainLeft")
+    local left = mainLeft and mainLeft:FindFirstChild("Left")
+    local tools = left and left:FindFirstChild("Tools")
+    local joinEventBtn = tools and tools:FindFirstChild("JoinEvent")
+
+    if joinEventBtn and joinEventBtn.Visible then
+        if firesignal then
+            if joinEventBtn:IsA("TextButton") or joinEventBtn:IsA("ImageButton") then
+                firesignal(joinEventBtn.MouseButton1Click)
+                firesignal(joinEventBtn.MouseButton1Down)
+                firesignal(joinEventBtn.Activated)
+            end
+        else
+            local pos = joinEventBtn.AbsolutePosition
+            local size = joinEventBtn.AbsoluteSize
+            local centerX = pos.X + (size.X / 2)
+            local centerY = pos.Y + (size.Y / 2) + 36
+
+            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 0)
             task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
         end
-    end
-
-    local userMaxHatch = nil
-    if reqHatchRemote then
-        pcall(function()
-            userMaxHatch = reqHatchRemote:InvokeServer()
-        end)
-    end
-
-    if type(userMaxHatch) ~= "number" or userMaxHatch <= 0 then
-        userMaxHatch = 52
-    end
-
-    if hatchRemote then
-        pcall(function()
-            hatchRemote:InvokeServer(eggId, userMaxHatch)
-        end)
-    end
-
-    task.wait(0.15)
-    local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
-    local centerX = viewport.X / 2
-    local centerY = viewport.Y / 2
-
-    for i = 1, 5 do
-        pcall(function()
-            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
-            task.wait(0.02)
-            VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
-        end)
-        task.wait(0.04)
     end
 end
 
 local function autoCollectFreeGifts()
-    if not autoGiftsEnabled or not scriptRunning then return end
-    
-    local network = ReplicatedStorage:FindFirstChild("Network")
-    if not network then return end
+    if not autoGiftsEnabled or not scriptRunning or not network then return end
     
     local redeemRemote = network:FindFirstChild("Redeem Free Gift")
     if not redeemRemote then return end
@@ -175,13 +201,97 @@ local function autoCollectFreeGifts()
     end
 end
 
+local function rejoinServer()
+    if #Players:GetPlayers() <= 1 then
+        TeleportService:Teleport(game.PlaceId, LocalPlayer)
+    else
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+    end
+end
+
+local function serverHop()
+    local placeId = game.PlaceId
+    local currentJobId = game.JobId
+    local serversUrl = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100"
+    
+    local success, result = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet(serversUrl))
+    end)
+    
+    if success and result and result.data then
+        for _, server in ipairs(result.data) do
+            if server.id ~= currentJobId and server.playing < server.maxPlayers then
+                TeleportService:TeleportToPlaceInstance(placeId, server.id, LocalPlayer)
+                return
+            end
+        end
+    end
+    TeleportService:Teleport(placeId, game.JobId, LocalPlayer)
+end
+
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "ProjectReligieUI"
+ScreenGui.Name = "KHubUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.DisplayOrder = 999
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local function sendNotification(title, message, duration)
+    duration = duration or 3
+    local toast = Instance.new("Frame", ScreenGui)
+    toast.Name = "NotificationToast"
+    toast.Size = UDim2.new(0, 240, 0, 65)
+    toast.Position = UDim2.new(1, 260, 1, -80)
+    toast.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+    toast.BorderSizePixel = 0
+    toast.ZIndex = 500
+    Instance.new("UICorner", toast).CornerRadius = UDim.new(0, 8)
+    
+    local stroke = Instance.new("UIStroke", toast)
+    stroke.Color = C_ACCENT
+    stroke.Thickness = 1
+
+    local tLbl = Instance.new("TextLabel", toast)
+    tLbl.Size = UDim2.new(1, -16, 0, 20)
+    tLbl.Position = UDim2.new(0, 10, 0, 8)
+    tLbl.BackgroundTransparency = 1
+    tLbl.Font = FONT_BOLD
+    tLbl.RichText = true
+    tLbl.Text = "<b>" .. title .. "</b>"
+    tLbl.TextColor3 = C_TEXT
+    tLbl.TextSize = 11
+    tLbl.TextXAlignment = Enum.TextXAlignment.Left
+    tLbl.ZIndex = 501
+
+    local mbl = Instance.new("TextLabel", toast)
+    mbl.Size = UDim2.new(1, -16, 0, 25)
+    mbl.Position = UDim2.new(0, 10, 0, 28)
+    mbl.BackgroundTransparency = 1
+    mbl.Font = FONT_MEDIUM
+    mbl.RichText = true
+    mbl.Text = "<b>" .. message .. "</b>"
+    mbl.TextColor3 = C_SUBTEXT
+    mbl.TextSize = 10
+    mbl.TextWrapped = true
+    mbl.TextXAlignment = Enum.TextXAlignment.Left
+    mbl.ZIndex = 501
+
+    TweenService:Create(toast, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Position = UDim2.new(1, -250, 1, -80)
+    }):Play()
+
+    task.spawn(function()
+        task.wait(duration)
+        if toast and toast.Parent then
+            TweenService:Create(toast, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+                Position = UDim2.new(1, 260, 1, -80)
+            }):Play()
+            task.wait(0.3)
+            toast:Destroy()
+        end
+    end)
+end
 
 local BlackOverlay = Instance.new("Frame", ScreenGui)
 BlackOverlay.Name = "BlackOverlay"
@@ -201,530 +311,1356 @@ MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.ClipsDescendants = true
 MainFrame.ZIndex = 10
+MainFrame.Visible = false 
+MainFrame.BackgroundTransparency = 1
 
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 14)
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
 local MainStroke = Instance.new("UIStroke", MainFrame)
 MainStroke.Thickness = 1
-MainStroke.Color = Color3.fromRGB(45, 45, 60)
+MainStroke.Color = Color3.fromRGB(38, 38, 52)
+
+local CloseBtn = Instance.new("TextButton", MainFrame)
+CloseBtn.Name = "CloseBtn"
+CloseBtn.Size = UDim2.new(0, 20, 0, 20)
+CloseBtn.Position = UDim2.new(1, -22, 0, 12)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Font = FONT_BOLD
+CloseBtn.RichText = true
+CloseBtn.Text = "<b>X</b>"
+CloseBtn.TextColor3 = Color3.fromRGB(160, 165, 180)
+CloseBtn.TextSize = 13
+CloseBtn.ZIndex = 40
+
+CloseBtn.MouseEnter:Connect(function()
+    CloseBtn.TextColor3 = C_DANGER
+end)
+
+CloseBtn.MouseLeave:Connect(function()
+    CloseBtn.TextColor3 = Color3.fromRGB(160, 165, 180)
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    uiVisible = false
+    MainFrame.Visible = false
+end)
 
 local Sidebar = Instance.new("Frame", MainFrame)
 Sidebar.Name = "Sidebar"
-Sidebar.Size = UDim2.new(0, 180, 1, 0)
+Sidebar.Size = UDim2.new(0, 185, 1, 0)
 Sidebar.BackgroundColor3 = C_SIDEBAR
 Sidebar.BorderSizePixel = 0
 Sidebar.ClipsDescendants = true
 Sidebar.ZIndex = 11
-Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 14)
+Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 12)
 
 local HeaderFrame = Instance.new("Frame", Sidebar)
-HeaderFrame.Size = UDim2.new(1, 0, 0, 60)
+HeaderFrame.Name = "HeaderFrame"
+HeaderFrame.Size = UDim2.new(1, 0, 0, 65)
 HeaderFrame.BackgroundTransparency = 1
 HeaderFrame.ZIndex = 12
 
-local CrossContainer = Instance.new("Frame", HeaderFrame)
-CrossContainer.Size = UDim2.new(0, 22, 0, 28)
-CrossContainer.Position = UDim2.new(0, 14, 0.5, -14)
-CrossContainer.BackgroundTransparency = 1
-CrossContainer.ZIndex = 13
+local HeaderContent = Instance.new("Frame", HeaderFrame)
+HeaderContent.Name = "HeaderContent"
+HeaderContent.Size = UDim2.new(1, -24, 1, -10)
+HeaderContent.Position = UDim2.new(0, 14, 0, 14)
+HeaderContent.BackgroundTransparency = 1
+HeaderContent.ZIndex = 13
 
-local VerticalBar = Instance.new("Frame", CrossContainer)
-VerticalBar.Size = UDim2.new(0, 4, 1, 0)
-VerticalBar.Position = UDim2.new(0.5, -2, 0, 0)
-VerticalBar.BackgroundColor3 = C_TEXT
-VerticalBar.BorderSizePixel = 0
-VerticalBar.ZIndex = 13
-Instance.new("UICorner", VerticalBar).CornerRadius = UDim.new(0, 2)
+local TitleLabel = Instance.new("TextLabel", HeaderContent)
+TitleLabel.Name = "TitleLabel"
+TitleLabel.Size = UDim2.new(1, 0, 0, 20)
+TitleLabel.Position = UDim2.new(0, 0, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Font = FONT_FREDOKA
+TitleLabel.RichText = true
+TitleLabel.Text = '<b><font color="#FFFFFF">K </font><font color="#7289DA">Hub</font></b>'
+TitleLabel.TextSize = 18
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.ZIndex = 14
 
-local HorizontalBar = Instance.new("Frame", CrossContainer)
-HorizontalBar.Size = UDim2.new(1, 0, 0, 4)
-HorizontalBar.Position = UDim2.new(0, 0, 0.32, -2)
-HorizontalBar.BackgroundColor3 = C_TEXT
-HorizontalBar.BorderSizePixel = 0
-HorizontalBar.ZIndex = 13
-Instance.new("UICorner", HorizontalBar).CornerRadius = UDim.new(0, 2)
+local TitleSub = Instance.new("TextLabel", HeaderContent)
+TitleSub.Name = "TitleSub"
+TitleSub.Size = UDim2.new(1, 0, 0, 14)
+TitleSub.Position = UDim2.new(0, 0, 0, 22)
+TitleSub.BackgroundTransparency = 1
+TitleSub.Font = FONT_MEDIUM
+TitleSub.RichText = true
+TitleSub.Text = "<b>✨ Pets vs Coins Event</b>"
+TitleSub.TextColor3 = C_SUBTEXT
+TitleSub.TextSize = 10
+TitleSub.TextXAlignment = Enum.TextXAlignment.Left
+TitleSub.ZIndex = 14
 
-local SidebarTitle = Instance.new("TextLabel", HeaderFrame)
-SidebarTitle.Size = UDim2.new(1, -48, 1, 0)
-SidebarTitle.Position = UDim2.new(0, 44, 0, 0)
-SidebarTitle.BackgroundTransparency = 1
-SidebarTitle.Font = Enum.Font.GothamBold
-SidebarTitle.Text = "Project Religie"
-
-SidebarTitle.TextColor3 = C_TEXT
-SidebarTitle.TextSize = 15
-SidebarTitle.TextXAlignment = Enum.TextXAlignment.Left
-SidebarTitle.ZIndex = 13
+local HeaderSeparator = Instance.new("Frame", HeaderFrame)
+HeaderSeparator.Size = UDim2.new(1, -28, 0, 1)
+HeaderSeparator.Position = UDim2.new(0, 14, 1, -1)
+HeaderSeparator.BackgroundColor3 = Color3.fromRGB(32, 32, 44)
+HeaderSeparator.BorderSizePixel = 0
+HeaderSeparator.ZIndex = 13
 
 local NavContainer = Instance.new("Frame", Sidebar)
-NavContainer.Size = UDim2.new(1, 0, 1, -125)
-NavContainer.Position = UDim2.new(0, 0, 0, 60)
+NavContainer.Size = UDim2.new(1, 0, 1, -150)
+NavContainer.Position = UDim2.new(0, 0, 0, 75)
 NavContainer.BackgroundTransparency = 1
 NavContainer.ZIndex = 12
 
 local SidebarLayout = Instance.new("UIListLayout", NavContainer)
 SidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
-SidebarLayout.Padding = UDim.new(0, 8)
+SidebarLayout.Padding = UDim.new(0, 5)
 SidebarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
 local SidebarPadding = Instance.new("UIPadding", NavContainer)
-SidebarPadding.PaddingLeft = UDim.new(0, 12)
-SidebarPadding.PaddingRight = UDim.new(0, 12)
+SidebarPadding.PaddingLeft = UDim.new(0, 10)
+SidebarPadding.PaddingRight = UDim.new(0, 10)
+
+local userRankTitle, userRankColor = getPlayerRank()
 
 local ProfileCard = Instance.new("Frame", Sidebar)
-ProfileCard.Size = UDim2.new(1, -24, 0, 48)
-ProfileCard.Position = UDim2.new(0, 12, 1, -60)
-ProfileCard.BackgroundColor3 = C_CARD
+ProfileCard.Name = "ProfileCard"
+ProfileCard.Size = UDim2.new(1, -20, 0, 52)
+ProfileCard.Position = UDim2.new(0, 10, 1, -70)
+ProfileCard.BackgroundColor3 = C_PROFILE
 ProfileCard.BorderSizePixel = 0
 ProfileCard.ZIndex = 12
-Instance.new("UICorner", ProfileCard).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", ProfileCard).CornerRadius = UDim.new(0, 8)
 
 local ProfileImage = Instance.new("ImageLabel", ProfileCard)
-ProfileImage.Size = UDim2.new(0, 34, 0, 34)
-ProfileImage.Position = UDim2.new(0, 7, 0.5, -17)
+ProfileImage.Size = UDim2.new(0, 32, 0, 32)
+ProfileImage.Position = UDim2.new(0, 8, 0.5, -16)
 ProfileImage.BackgroundTransparency = 1
 ProfileImage.Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
 ProfileImage.ZIndex = 13
 Instance.new("UICorner", ProfileImage).CornerRadius = UDim.new(1, 0)
 
-local ProfileName = Instance.new("TextLabel", ProfileCard)
-ProfileName.Size = UDim2.new(1, -50, 0, 16)
-ProfileName.Position = UDim2.new(0, 48, 0, 8)
-ProfileName.BackgroundTransparency = 1
-ProfileName.Font = Enum.Font.GothamBold
-ProfileName.Text = LocalPlayer.DisplayName
-ProfileName.TextColor3 = C_TEXT
-ProfileName.TextSize = 13
-ProfileName.TextXAlignment = Enum.TextXAlignment.Left
-ProfileName.TextTruncate = Enum.TextTruncate.AtEnd
-ProfileName.ZIndex = 13
-
 local ProfileUser = Instance.new("TextLabel", ProfileCard)
-ProfileUser.Size = UDim2.new(1, -50, 0, 14)
-ProfileUser.Position = UDim2.new(0, 48, 0, 24)
+ProfileUser.Size = UDim2.new(1, -48, 0, 15)
+ProfileUser.Position = UDim2.new(0, 44, 0, 10)
 ProfileUser.BackgroundTransparency = 1
-ProfileUser.Font = Enum.Font.Gotham
-ProfileUser.Text = "@" .. LocalPlayer.Name
-ProfileUser.TextColor3 = C_SUBTEXT
-ProfileUser.TextSize = 12
+ProfileUser.Font = FONT_BOLD
+ProfileUser.RichText = true
+ProfileUser.Text = "<b>@" .. LocalPlayer.Name .. "</b>"
+ProfileUser.TextColor3 = C_TEXT
+ProfileUser.TextSize = 11
 ProfileUser.TextXAlignment = Enum.TextXAlignment.Left
 ProfileUser.TextTruncate = Enum.TextTruncate.AtEnd
 ProfileUser.ZIndex = 13
 
+local ProfileRank = Instance.new("TextLabel", ProfileCard)
+ProfileRank.Size = UDim2.new(1, -48, 0, 13)
+ProfileRank.Position = UDim2.new(0, 44, 0, 27)
+ProfileRank.BackgroundTransparency = 1
+ProfileRank.Font = FONT_BOLD
+ProfileRank.RichText = true
+ProfileRank.Text = "<b>• " .. userRankTitle .. "</b>"
+ProfileRank.TextColor3 = userRankColor
+ProfileRank.TextSize = 10
+ProfileRank.TextXAlignment = Enum.TextXAlignment.Left
+ProfileRank.ZIndex = 13
+
+local VersionLabel = Instance.new("TextLabel", Sidebar)
+VersionLabel.Size = UDim2.new(1, 0, 0, 14)
+VersionLabel.Position = UDim2.new(0, 0, 1, -14)
+VersionLabel.BackgroundTransparency = 1
+VersionLabel.Font = FONT_BOLD
+VersionLabel.RichText = true
+VersionLabel.Text = "<b>K Hub v1.0</b>"
+VersionLabel.TextColor3 = C_SUBTEXT
+VersionLabel.TextSize = 10
+VersionLabel.ZIndex = 12
+
 local ContentContainer = Instance.new("Frame", MainFrame)
-ContentContainer.Size = UDim2.new(1, -180, 1, 0)
-ContentContainer.Position = UDim2.new(0, 180, 0, 0)
+ContentContainer.Size = UDim2.new(1, -185, 1, 0)
+ContentContainer.Position = UDim2.new(0, 185, 0, 0)
 ContentContainer.BackgroundTransparency = 1
 ContentContainer.ZIndex = 11
 
 local ContentPadding = Instance.new("UIPadding", ContentContainer)
-ContentPadding.PaddingTop = UDim.new(0, 18)
-ContentPadding.PaddingBottom = UDim.new(0, 18)
-ContentPadding.PaddingLeft = UDim.new(0, 18)
-ContentPadding.PaddingRight = UDim.new(0, 18)
+ContentPadding.PaddingTop = UDim.new(0, 36)
+ContentPadding.PaddingBottom = UDim.new(0, 16)
+ContentPadding.PaddingLeft = UDim.new(0, 16)
+ContentPadding.PaddingRight = UDim.new(0, 16)
 
 local Tabs = {
-    Dashboard = Instance.new("Frame"),
-    Automation = Instance.new("Frame"),
-    Graphics = Instance.new("Frame"),
-    Settings = Instance.new("Frame")
+    Dashboard = Instance.new("ScrollingFrame"),
+    Automation = Instance.new("ScrollingFrame"),
+    Eggs = Instance.new("ScrollingFrame"),
+    Upgrades = Instance.new("ScrollingFrame"),
+    Graphics = Instance.new("ScrollingFrame"),
+    Settings = Instance.new("ScrollingFrame")
 }
 
 local TabButtons = {}
-local tabIcons = { Dashboard = "📊 ", Automation = "⚡ ", Graphics = "🎨 ", Settings = "⚙️ " }
+local tabIcons = { Dashboard = "📊 ", Automation = "⚡ ", Eggs = "🥚 ", Upgrades = "📈 ", Graphics = "🎨 ", Settings = "⚙️ " }
+local sectionHeaderList = {}
+local staticAccentButtonsList = {}
+local colorPickerButtonsList = {}
+local dashboardLiveBoxesList = {}
+
+local presetButtonsMap = {}
+local configButtonsMap = {}
+local selectedPresetName = "Default Dark"
+local selectedConfigName = "Default Config"
+
+local rebuildPresetSelectionList
+local rebuildConfigSelectionList
+
+local function updateAllDynamicElementsColor()
+    for name, btn in pairs(TabButtons) do
+        if btn and btn.Parent then
+            local tabFrame = Tabs[name]
+            if tabFrame and tabFrame.Visible then
+                btn.BackgroundColor3 = C_ACCENT
+            end
+        end
+    end
+    
+    for name, itemBtn in pairs(presetButtonsMap) do
+        if itemBtn and itemBtn.Parent then
+            itemBtn.BackgroundColor3 = (name == selectedPresetName) and C_ACCENT or C_PRESET_SELECTION
+        end
+    end
+
+    if configButtonsMap then
+        for name, configBtn in pairs(configButtonsMap) do
+            if configBtn and configBtn.Parent then
+                configBtn.BackgroundColor3 = (name == selectedConfigName) and C_ACCENT or C_CONFIG_SELECTION
+            end
+        end
+    end
+
+    if not isCustomFPS and fpsBtn and fpsBtn.Parent then
+        fpsBtn.BackgroundColor3 = C_BUTTON
+    end
+
+    for _, header in ipairs(sectionHeaderList) do
+        if header and header.Parent then
+            header.TextColor3 = C_SECTION_HEADER
+        end
+    end
+
+    for _, btn in ipairs(staticAccentButtonsList) do
+        if btn and btn.Parent then
+            btn.BackgroundColor3 = C_BUTTON
+        end
+    end
+
+    for _, btn in ipairs(colorPickerButtonsList) do
+        if btn and btn.Parent then
+            btn.BackgroundColor3 = C_BUTTON
+        end
+    end
+
+    for _, box in ipairs(dashboardLiveBoxesList) do
+        if box and box.Parent then
+            box.BackgroundColor3 = C_DASHBOARD_LIVE
+        end
+    end
+
+    for _, container in ipairs(containerFramesList) do
+        if container and container.Parent then
+            container.BackgroundColor3 = C_CONTAINERS
+        end
+    end
+end
 
 local function createTab(name, layoutOrder)
     local frame = Tabs[name]
     frame.Name = name .. "Tab"
     frame.Size = UDim2.new(1, 0, 1, 0)
     frame.BackgroundTransparency = 1
+    frame.BorderSizePixel = 0
+    frame.ScrollBarThickness = 4
+    frame.CanvasSize = UDim2.new(0, 0, 0, 0)
     frame.Visible = false
     frame.Parent = ContentContainer
 
     local layout = Instance.new("UIListLayout", frame)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding = UDim.new(0, 10)
+    layout.Padding = UDim.new(0, 8)
+    
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        frame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 25)
+    end)
 
     local btn = Instance.new("TextButton", NavContainer)
     btn.Name = name .. "Btn"
-    btn.Size = UDim2.new(1, 0, 0, 36)
-    btn.BackgroundColor3 = C_CARD
+    btn.Size = UDim2.new(1, 0, 0, 30)
+    btn.BackgroundColor3 = C_ACCENT
     btn.BackgroundTransparency = 1
-    btn.Font = Enum.Font.GothamBold
-    btn.Text = (tabIcons[name] or "") .. name
+    btn.Font = FONT_BOLD
+    btn.RichText = true
+    btn.Text = "<b>" .. (tabIcons[name] or "") .. name .. "</b>"
     btn.TextColor3 = C_SUBTEXT
-    btn.TextSize = 13
+    btn.TextSize = 11
     btn.LayoutOrder = layoutOrder
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 
     TabButtons[name] = btn
 
     btn.MouseButton1Click:Connect(function()
         for tabName, tabFrame in pairs(Tabs) do
             tabFrame.Visible = (tabName == name)
-            local tBtn = TabButtons[tabName]
-            if tabName == name then
-                tBtn.BackgroundTransparency = 0
-                tBtn.TextColor3 = C_TEXT
-            else
-                tBtn.BackgroundTransparency = 1
-                tBtn.TextColor3 = C_SUBTEXT
-            end
         end
+        updateActiveTabStyles(name)
     end)
+end
+
+function updateActiveTabStyles(activeName)
+    for tabName, tBtn in pairs(TabButtons) do
+        if tabName == activeName then
+            tBtn.BackgroundColor3 = C_ACCENT
+            tBtn.BackgroundTransparency = 0
+            tBtn.TextColor3 = C_TEXT
+        else
+            tBtn.BackgroundColor3 = C_CARD
+            tBtn.BackgroundTransparency = 1
+            tBtn.TextColor3 = C_SUBTEXT
+        end
+    end
 end
 
 createTab("Dashboard", 1)
 createTab("Automation", 2)
-createTab("Graphics", 3)
-createTab("Settings", 4)
+createTab("Eggs", 3)
+createTab("Upgrades", 4)
+createTab("Graphics", 5)
+createTab("Settings", 6)
 
 Tabs.Dashboard.Visible = true
-TabButtons.Dashboard.BackgroundTransparency = 0
-TabButtons.Dashboard.TextColor3 = C_TEXT
+updateActiveTabStyles("Dashboard")
+
+local cardsList = {}
+
+local function createDescriptionLabel(parent, text)
+    local desc = Instance.new("TextLabel", parent)
+    desc.Size = UDim2.new(0.58, -10, 0, 34)
+    desc.Position = UDim2.new(0, 12, 0, 30)
+    desc.BackgroundTransparency = 1
+    desc.Font = FONT_MEDIUM
+    desc.RichText = true
+    desc.Text = "<b>" .. text .. "</b>"
+    desc.TextColor3 = C_SUBTEXT
+    desc.TextSize = 10
+    desc.TextWrapped = true
+    desc.TextXAlignment = Enum.TextXAlignment.Left
+    desc.TextYAlignment = Enum.TextYAlignment.Center
+
+    return desc
+end
 
 local function createCard(parent, titleText, sizeY)
     local card = Instance.new("Frame", parent)
-    card.Size = UDim2.new(1, 0, 0, sizeY or 78)
+    card.Size = UDim2.new(1, 0, 0, sizeY or 74)
     card.BackgroundColor3 = C_CARD
     card.BorderSizePixel = 0
-    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+    
+    table.insert(cardsList, card)
 
     local title = Instance.new("TextLabel", card)
-    title.Size = UDim2.new(1, -20, 0, 22)
+    title.Size = UDim2.new(1, -20, 0, 20)
     title.Position = UDim2.new(0, 12, 0, 8)
     title.BackgroundTransparency = 1
-    title.Font = Enum.Font.GothamBold
-    title.Text = titleText
+    title.Font = FONT_BOLD
+    title.RichText = true
+    title.Text = "<b>" .. titleText .. "</b>"
     title.TextColor3 = C_TEXT
-    title.TextSize = 13
+    title.TextSize = 11
     title.TextXAlignment = Enum.TextXAlignment.Left
 
     return card
 end
 
-local afkCard = createCard(Tabs.Dashboard, "🛡️ ANTI-AFK SYSTEM", 75)
+local statsCard = createCard(Tabs.Dashboard, "LIVE SESSION STATS", 82)
+
+local gridContainer = Instance.new("Frame", statsCard)
+gridContainer.Size = UDim2.new(1, -24, 0, 40)
+gridContainer.Position = UDim2.new(0, 12, 0, 32)
+gridContainer.BackgroundTransparency = 1
+
+local gridLayout = Instance.new("UIGridLayout", gridContainer)
+gridLayout.CellSize = UDim2.new(0.235, 0, 1, 0)
+gridLayout.CellPadding = UDim2.new(0.02, 0, 0, 0)
+gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local function createStatBox(parent, titleText, order)
+    local box = Instance.new("Frame", parent)
+    box.BackgroundColor3 = C_DASHBOARD_LIVE
+    box.BorderSizePixel = 0
+    box.LayoutOrder = order
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 6)
+    
+    table.insert(dashboardLiveBoxesList, box)
+
+    local title = Instance.new("TextLabel", box)
+    title.Size = UDim2.new(1, 0, 0, 14)
+    title.Position = UDim2.new(0, 0, 0, 4)
+    title.BackgroundTransparency = 1
+    title.Font = FONT_BOLD
+    title.RichText = true
+    title.Text = "<b>" .. string.upper(titleText) .. "</b>"
+    title.TextColor3 = C_SUBTEXT
+    title.TextSize = 9
+
+    local val = Instance.new("TextLabel", box)
+    val.Size = UDim2.new(1, 0, 0, 16)
+    val.Position = UDim2.new(0, 0, 0, 18)
+    val.BackgroundTransparency = 1
+    val.Font = FONT_BOLD
+    val.RichText = true
+    val.Text = "<b>--</b>"
+    val.TextColor3 = C_TEXT
+    val.TextSize = 11
+
+    return val
+end
+
+local fpsVal = createStatBox(gridContainer, "FPS", 1)
+local pingVal = createStatBox(gridContainer, "PING", 2)
+local uptimeVal = createStatBox(gridContainer, "UPTIME", 3)
+local memVal = createStatBox(gridContainer, "MEMORY", 4)
+
+local startTime = os.time()
+
+task.spawn(function()
+    while scriptRunning do
+        pcall(function()
+            local currentFps = math.floor(1 / RunService.RenderStepped:Wait())
+            local currentPing = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+            local currentMem = math.floor(Stats:GetTotalMemoryUsageMb())
+
+            local elapsed = os.time() - startTime
+            local hrs = math.floor(elapsed / 3600)
+            local mins = math.floor((elapsed % 3600) / 60)
+            local secs = elapsed % 60
+            local uptimeFormatted = string.format("%02d:%02d:%02d", hrs, mins, secs)
+
+            fpsVal.Text = "<b>" .. tostring(currentFps) .. "</b>"
+            pingVal.Text = "<b>" .. currentPing .. " ms</b>"
+            uptimeVal.Text = "<b>" .. uptimeFormatted .. "</b>"
+            memVal.Text = "<b>" .. currentMem .. " MB</b>"
+        end)
+        task.wait(1)
+    end
+end)
+
+local afkCard = createCard(Tabs.Dashboard, "🛡️ ANTI-AFK SYSTEM", 72)
 local afkStatusLabel = Instance.new("TextLabel", afkCard)
-afkStatusLabel.Size = UDim2.new(0.60, -15, 0, 34)
-afkStatusLabel.Position = UDim2.new(0, 12, 0, 32)
+afkStatusLabel.Size = UDim2.new(0.58, -10, 0, 30)
+afkStatusLabel.Position = UDim2.new(0, 12, 0, 30)
 afkStatusLabel.BackgroundTransparency = 1
-afkStatusLabel.Font = Enum.Font.GothamMedium
-afkStatusLabel.Text = "Status: Active"
+afkStatusLabel.Font = FONT_BOLD
+afkStatusLabel.RichText = true
+afkStatusLabel.Text = "<b>Status: Active</b>"
 afkStatusLabel.TextColor3 = C_SUCCESS
-afkStatusLabel.TextSize = 12
-afkStatusLabel.TextWrapped = true
+afkStatusLabel.TextSize = 11
 afkStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-afkStatusLabel.TextYAlignment = Enum.TextYAlignment.Center
 
 local afkBtn = Instance.new("TextButton", afkCard)
-afkBtn.Size = UDim2.new(0.35, 0, 0, 30)
-afkBtn.Position = UDim2.new(0.62, 0, 0, 32)
-afkBtn.BackgroundColor3 = C_SUCCESS
-afkBtn.Font = Enum.Font.GothamBold
-afkBtn.Text = "ENABLED"
+afkBtn.Size = UDim2.new(0.35, 0, 0, 28)
+afkBtn.Position = UDim2.new(0.62, 0, 0, 30)
+afkBtn.BackgroundColor3 = C_DANGER
+afkBtn.Font = FONT_BOLD
+afkBtn.RichText = true
+afkBtn.Text = "<b>DISABLED</b>"
 afkBtn.TextColor3 = C_TEXT
-afkBtn.TextSize = 12
-Instance.new("UICorner", afkBtn).CornerRadius = UDim.new(0, 8)
+afkBtn.TextSize = 11
+Instance.new("UICorner", afkBtn).CornerRadius = UDim.new(0, 6)
 
-local fpsCard = createCard(Tabs.Dashboard, "⏱️ FPS LIMITER", 78)
-local fpsBtn = Instance.new("TextButton", fpsCard)
-fpsBtn.Size = UDim2.new(0.48, -5, 0, 30)
-fpsBtn.Position = UDim2.new(0, 12, 0, 36)
-fpsBtn.BackgroundColor3 = C_ACCENT
-fpsBtn.Font = Enum.Font.GothamBold
-fpsBtn.Text = "FPS: Normal"
+afkBtn.MouseButton1Click:Connect(function()
+    antiAfkEnabled = not antiAfkEnabled
+    
+    if antiAfkEnabled then
+        afkBtn.Text = "<b>ENABLED</b>"
+        afkBtn.BackgroundColor3 = C_SUCCESS
+        afkStatusLabel.Text = "<b>Status: Active</b>"
+        afkStatusLabel.TextColor3 = C_SUCCESS
+    else
+        afkBtn.Text = "<b>DISABLED</b>"
+        afkBtn.BackgroundColor3 = C_DANGER
+        afkStatusLabel.Text = "<b>Status: Disabled</b>"
+        afkStatusLabel.TextColor3 = C_DANGER
+    end
+end)
+
+local fpsCard = createCard(Tabs.Dashboard, "⏱️ FPS LIMITER", 72)
+fpsBtn = Instance.new("TextButton", fpsCard)
+fpsBtn.Size = UDim2.new(0.48, -5, 0, 28)
+fpsBtn.Position = UDim2.new(0, 12, 0, 32)
+fpsBtn.BackgroundColor3 = C_BUTTON
+fpsBtn.Font = FONT_BOLD
+fpsBtn.RichText = true
+fpsBtn.Text = "<b>FPS: Normal</b>"
 fpsBtn.TextColor3 = C_TEXT
-fpsBtn.TextSize = 12
-Instance.new("UICorner", fpsBtn).CornerRadius = UDim.new(0, 8)
+fpsBtn.TextSize = 11
+Instance.new("UICorner", fpsBtn).CornerRadius = UDim.new(0, 6)
 
 local fpsInput = Instance.new("TextBox", fpsCard)
-fpsInput.Size = UDim2.new(0.48, -5, 0, 30)
-fpsInput.Position = UDim2.new(0.5, 0, 0, 36)
-fpsInput.BackgroundColor3 = Color3.fromRGB(18, 18, 25)
-fpsInput.Font = Enum.Font.GothamMedium
+fpsInput.Size = UDim2.new(0.48, -5, 0, 28)
+fpsInput.Position = UDim2.new(0.5, 0, 0, 32)
+fpsInput.BackgroundColor3 = C_STATBOX
+fpsInput.Font = FONT_BOLD
 fpsInput.Text = "1"
 fpsInput.PlaceholderText = "Custom FPS"
 fpsInput.TextColor3 = C_TEXT
-fpsInput.TextSize = 13
-Instance.new("UICorner", fpsInput).CornerRadius = UDim.new(0, 8)
+fpsInput.TextSize = 11
+fpsInput.ClipsDescendants = true
+Instance.new("UICorner", fpsInput).CornerRadius = UDim.new(0, 6)
 
-local autoHatchCard = createCard(Tabs.Automation, "🥚 AUTO HATCH GARDEN EGG", 78)
-local autoHatchDesc = Instance.new("TextLabel", autoHatchCard)
-autoHatchDesc.Size = UDim2.new(0.60, -15, 0, 38)
-autoHatchDesc.Position = UDim2.new(0, 12, 0, 30)
-autoHatchDesc.BackgroundTransparency = 1
-autoHatchDesc.Font = Enum.Font.GothamMedium
-autoHatchDesc.Text = "Teleports to Garden Egg and continuously hatches."
-autoHatchDesc.TextColor3 = C_SUBTEXT
-autoHatchDesc.TextSize = 12
-autoHatchDesc.TextWrapped = true
-autoHatchDesc.TextXAlignment = Enum.TextXAlignment.Left
-autoHatchDesc.TextYAlignment = Enum.TextYAlignment.Center
-
-local autoHatchBtn = Instance.new("TextButton", autoHatchCard)
-autoHatchBtn.Size = UDim2.new(0.35, 0, 0, 30)
-autoHatchBtn.Position = UDim2.new(0.62, 0, 0, 34)
-autoHatchBtn.BackgroundColor3 = C_DANGER
-autoHatchBtn.Font = Enum.Font.GothamBold
-autoHatchBtn.Text = "DISABLED"
-autoHatchBtn.TextColor3 = C_TEXT
-autoHatchBtn.TextSize = 12
-Instance.new("UICorner", autoHatchBtn).CornerRadius = UDim.new(0, 8)
-
-local giftsCard = createCard(Tabs.Automation, "🎁 AUTO COLLECT FREE GIFTS", 78)
-local giftsDesc = Instance.new("TextLabel", giftsCard)
-giftsDesc.Size = UDim2.new(0.60, -15, 0, 38)
-giftsDesc.Position = UDim2.new(0, 12, 0, 30)
-giftsDesc.BackgroundTransparency = 1
-giftsDesc.Font = Enum.Font.GothamMedium
-giftsDesc.Text = "Automatically redeems all 12 free gifts periodically."
-giftsDesc.TextColor3 = C_SUBTEXT
-giftsDesc.TextSize = 12
-giftsDesc.TextWrapped = true
-giftsDesc.TextXAlignment = Enum.TextXAlignment.Left
-giftsDesc.TextYAlignment = Enum.TextYAlignment.Center
-
-local giftsBtn = Instance.new("TextButton", giftsCard)
-giftsBtn.Size = UDim2.new(0.35, 0, 0, 30)
-giftsBtn.Position = UDim2.new(0.62, 0, 0, 34)
-giftsBtn.BackgroundColor3 = C_DANGER
-giftsBtn.Font = Enum.Font.GothamBold
-giftsBtn.Text = "DISABLED"
-giftsBtn.TextColor3 = C_TEXT
-giftsBtn.TextSize = 12
-Instance.new("UICorner", giftsBtn).CornerRadius = UDim.new(0, 8)
-
-local merchantCard = createCard(Tabs.Automation, "🛒 AUTO FARMING MERCHANT", 78)
-local merchantDesc = Instance.new("TextLabel", merchantCard)
-merchantDesc.Size = UDim2.new(0.60, -15, 0, 38)
-merchantDesc.Position = UDim2.new(0, 12, 0, 30)
-merchantDesc.BackgroundTransparency = 1
-merchantDesc.Font = Enum.Font.GothamMedium
-merchantDesc.Text = "Automatically purchases merchant items."
-merchantDesc.TextColor3 = C_SUBTEXT
-merchantDesc.TextSize = 12
-merchantDesc.TextWrapped = true
-merchantDesc.TextXAlignment = Enum.TextXAlignment.Left
-merchantDesc.TextYAlignment = Enum.TextYAlignment.Center
-
-local merchantBtn = Instance.new("TextButton", merchantCard)
-merchantBtn.Size = UDim2.new(0.35, 0, 0, 30)
-merchantBtn.Position = UDim2.new(0.62, 0, 0, 34)
-merchantBtn.BackgroundColor3 = C_SUCCESS
-merchantBtn.Font = Enum.Font.GothamBold
-merchantBtn.Text = "ENABLED"
-merchantBtn.TextColor3 = C_TEXT
-merchantBtn.TextSize = 12
-Instance.new("UICorner", merchantBtn).CornerRadius = UDim.new(0, 8)
-
-local collectCard = createCard(Tabs.Automation, "🌱 AUTO COLLECT PLOTS", 78)
-local collectDesc = Instance.new("TextLabel", collectCard)
-collectDesc.Size = UDim2.new(0.60, -15, 0, 38)
-collectDesc.Position = UDim2.new(0, 12, 0, 30)
-collectDesc.BackgroundTransparency = 1
-collectDesc.Font = Enum.Font.GothamMedium
-collectDesc.Text = "Collects all plots every 60s."
-collectDesc.TextColor3 = C_SUBTEXT
-collectDesc.TextSize = 12
-collectDesc.TextWrapped = true
-collectDesc.TextXAlignment = Enum.TextXAlignment.Left
-collectDesc.TextYAlignment = Enum.TextYAlignment.Center
-
-local collectBtn = Instance.new("TextButton", collectCard)
-collectBtn.Size = UDim2.new(0.35, 0, 0, 30)
-collectBtn.Position = UDim2.new(0.62, 0, 0, 34)
-collectBtn.BackgroundColor3 = C_DANGER
-collectBtn.Font = Enum.Font.GothamBold
-collectBtn.Text = "DISABLED"
-collectBtn.TextColor3 = C_TEXT
-collectBtn.TextSize = 12
-Instance.new("UICorner", collectBtn).CornerRadius = UDim.new(0, 8)
-
-local render3dCard = createCard(Tabs.Graphics, "🖥️ DISABLE 3D RENDERING", 75)
-local render3dDesc = Instance.new("TextLabel", render3dCard)
-render3dDesc.Size = UDim2.new(0.55, -15, 0, 38)
-render3dDesc.Position = UDim2.new(0, 12, 0, 28)
-render3dDesc.BackgroundTransparency = 1
-render3dDesc.Font = Enum.Font.GothamMedium
-render3dDesc.Text = "Turns screen black to save GPU usage."
-render3dDesc.TextColor3 = C_SUBTEXT
-render3dDesc.TextSize = 12
-render3dDesc.TextWrapped = true
-render3dDesc.TextXAlignment = Enum.TextXAlignment.Left
-render3dDesc.TextYAlignment = Enum.TextYAlignment.Center
-
-local render3dBtn = Instance.new("TextButton", render3dCard)
-render3dBtn.Size = UDim2.new(0.40, 0, 0, 30)
-render3dBtn.Position = UDim2.new(0.57, 0, 0, 32)
-render3dBtn.BackgroundColor3 = C_DANGER
-render3dBtn.Font = Enum.Font.GothamBold
-render3dBtn.Text = "OFF (Black Screen)"
-render3dBtn.TextColor3 = C_TEXT
-render3dBtn.TextSize = 11
-Instance.new("UICorner", render3dBtn).CornerRadius = UDim.new(0, 8)
-
-local potatoCard = createCard(Tabs.Graphics, "🥔 POTATO MODE (DESTRUCTIVE)", 75)
-local potatoDesc = Instance.new("TextLabel", potatoCard)
-potatoDesc.Size = UDim2.new(0.55, -15, 0, 38)
-potatoDesc.Position = UDim2.new(0, 12, 0, 28)
-potatoDesc.BackgroundTransparency = 1
-potatoDesc.Font = Enum.Font.GothamMedium
-potatoDesc.Text = "Lowers graphics & destroys textures."
-potatoDesc.TextColor3 = C_SUBTEXT
-potatoDesc.TextSize = 12
-potatoDesc.TextWrapped = true
-potatoDesc.TextXAlignment = Enum.TextXAlignment.Left
-potatoDesc.TextYAlignment = Enum.TextYAlignment.Center
-
-local potatoBtn = Instance.new("TextButton", potatoCard)
-potatoBtn.Size = UDim2.new(0.40, 0, 0, 30)
-potatoBtn.Position = UDim2.new(0.57, 0, 0, 32)
-potatoBtn.BackgroundColor3 = C_DANGER
-potatoBtn.Font = Enum.Font.GothamBold
-potatoBtn.Text = "OFF"
-potatoBtn.TextColor3 = C_TEXT
-potatoBtn.TextSize = 12
-Instance.new("UICorner", potatoBtn).CornerRadius = UDim.new(0, 8)
-
-local keybindCard = createCard(Tabs.Settings, "⌨️ MENU TOGGLE KEYBIND", 75)
-local keybindDesc = Instance.new("TextLabel", keybindCard)
-keybindDesc.Size = UDim2.new(0.55, -15, 0, 38)
-keybindDesc.Position = UDim2.new(0, 12, 0, 28)
-keybindDesc.BackgroundTransparency = 1
-keybindDesc.Font = Enum.Font.GothamMedium
-keybindDesc.Text = "Click button to rebind menu key."
-keybindDesc.TextColor3 = C_SUBTEXT
-keybindDesc.TextSize = 12
-keybindDesc.TextWrapped = true
-keybindDesc.TextXAlignment = Enum.TextXAlignment.Left
-keybindDesc.TextYAlignment = Enum.TextYAlignment.Center
-
-local keybindBtn = Instance.new("TextButton", keybindCard)
-keybindBtn.Size = UDim2.new(0.40, 0, 0, 30)
-keybindBtn.Position = UDim2.new(0.57, 0, 0, 32)
-keybindBtn.BackgroundColor3 = C_ACCENT
-keybindBtn.Font = Enum.Font.GothamBold
-keybindBtn.Text = "Key: Insert"
-keybindBtn.TextColor3 = C_TEXT
-keybindBtn.TextSize = 12
-Instance.new("UICorner", keybindBtn).CornerRadius = UDim.new(0, 8)
-
-local unloadCard = createCard(Tabs.Settings, "🚪 UNLOAD SCRIPT", 75)
-local unloadDesc = Instance.new("TextLabel", unloadCard)
-unloadDesc.Size = UDim2.new(0.55, -15, 0, 38)
-unloadDesc.Position = UDim2.new(0, 12, 0, 28)
-unloadDesc.BackgroundTransparency = 1
-unloadDesc.Font = Enum.Font.GothamMedium
-unloadDesc.Text = "Shuts down all tasks and removes UI."
-unloadDesc.TextColor3 = C_SUBTEXT
-unloadDesc.TextSize = 12
-unloadDesc.TextWrapped = true
-unloadDesc.TextXAlignment = Enum.TextXAlignment.Left
-unloadDesc.TextYAlignment = Enum.TextYAlignment.Center
-
-local unloadBtn = Instance.new("TextButton", unloadCard)
-unloadBtn.Size = UDim2.new(0.40, 0, 0, 30)
-unloadBtn.Position = UDim2.new(0.57, 0, 0, 32)
-unloadBtn.BackgroundColor3 = C_DANGER
-unloadBtn.Font = Enum.Font.GothamBold
-unloadBtn.Text = "UNLOAD"
-unloadBtn.TextColor3 = C_TEXT
-unloadBtn.TextSize = 12
-Instance.new("UICorner", unloadBtn).CornerRadius = UDim.new(0, 8)
-
-local ModalOverlay = Instance.new("Frame", ScreenGui)
-ModalOverlay.Name = "ModalOverlay"
-ModalOverlay.Size = UDim2.new(1, 0, 1, 0)
-ModalOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-ModalOverlay.BackgroundTransparency = 0.5
-ModalOverlay.Visible = false
-ModalOverlay.ZIndex = 50
-
-local ModalFrame = Instance.new("Frame", ModalOverlay)
-ModalFrame.Size = UDim2.new(0, 360, 0, 180)
-ModalFrame.Position = UDim2.new(0.5, -180, 0.5, -90)
-ModalFrame.BackgroundColor3 = C_BG
-ModalFrame.BorderSizePixel = 0
-ModalFrame.ZIndex = 51
-Instance.new("UICorner", ModalFrame).CornerRadius = UDim.new(0, 12)
-
-local ModalStroke = Instance.new("UIStroke", ModalFrame)
-ModalStroke.Color = C_DANGER
-ModalStroke.Thickness = 1.5
-
-local ModalTitle = Instance.new("TextLabel", ModalFrame)
-ModalTitle.Size = UDim2.new(1, 0, 0, 30)
-ModalTitle.Position = UDim2.new(0, 0, 0, 14)
-ModalTitle.BackgroundTransparency = 1
-ModalTitle.Font = Enum.Font.GothamBold
-ModalTitle.Text = "⚠️ WARNING"
-ModalTitle.TextColor3 = C_DANGER
-ModalTitle.TextSize = 14
-
-local ModalText = Instance.new("TextLabel", ModalFrame)
-ModalText.Size = UDim2.new(1, -30, 0, 55)
-ModalText.Position = UDim2.new(0, 15, 0, 44)
-ModalText.BackgroundTransparency = 1
-ModalText.Font = Enum.Font.GothamMedium
-ModalText.Text = ""
-ModalText.TextColor3 = C_TEXT
-ModalText.TextSize = 13
-ModalText.TextWrapped = true
-
-local ModalYes = Instance.new("TextButton", ModalFrame)
-ModalYes.Size = UDim2.new(0.42, 0, 0, 32)
-ModalYes.Position = UDim2.new(0.06, 0, 0, 126)
-ModalYes.BackgroundColor3 = C_DANGER
-ModalYes.Font = Enum.Font.GothamBold
-ModalYes.Text = "PROCEED"
-ModalYes.TextColor3 = C_TEXT
-ModalYes.TextSize = 12
-Instance.new("UICorner", ModalYes).CornerRadius = UDim.new(0, 8)
-
-local ModalNo = Instance.new("TextButton", ModalFrame)
-ModalNo.Size = UDim2.new(0.42, 0, 0, 32)
-ModalNo.Position = UDim2.new(0.52, 0, 0, 126)
-ModalNo.BackgroundColor3 = C_CARD
-ModalNo.Font = Enum.Font.GothamBold
-ModalNo.Text = "CANCEL"
-ModalNo.TextColor3 = C_TEXT
-ModalNo.TextSize = 12
-Instance.new("UICorner", ModalNo).CornerRadius = UDim.new(0, 8)
-
-local modalAction = nil
-
-local function showWarning(title, message, isAlertOnly, onConfirm)
-    ModalTitle.Text = title
-    ModalText.Text = message
-    modalAction = onConfirm
-
-    if isAlertOnly then
-        ModalYes.Visible = false
-        ModalNo.Size = UDim2.new(0.88, 0, 0, 32)
-        ModalNo.Position = UDim2.new(0.06, 0, 0, 126)
-        ModalNo.Text = "GOT IT"
-    else
-        ModalYes.Visible = true
-        ModalYes.Size = UDim2.new(0.42, 0, 0, 32)
-        ModalYes.Position = UDim2.new(0.06, 0, 0, 126)
-        ModalNo.Size = UDim2.new(0.42, 0, 0, 32)
-        ModalNo.Position = UDim2.new(0.52, 0, 0, 126)
-        ModalNo.Text = "CANCEL"
-    end
-    ModalOverlay.Visible = true
+local function createSectionHeader(parent, text)
+    local header = Instance.new("TextLabel", parent)
+    header.Size = UDim2.new(1, 0, 0, 22)
+    header.BackgroundTransparency = 1
+    header.Font = FONT_BOLD
+    header.RichText = true
+    header.Text = "<b>" .. text .. "</b>"
+    header.TextColor3 = C_SECTION_HEADER
+    header.TextSize = 11
+    header.TextXAlignment = Enum.TextXAlignment.Left
+    
+    table.insert(sectionHeaderList, header)
+    return header
 end
 
-ModalYes.MouseButton1Click:Connect(function()
-    ModalOverlay.Visible = false
-    if modalAction then modalAction() end
+createSectionHeader(Tabs.Automation, "Pets vs Coins Event Automation")
+
+local giftsCard = createCard(Tabs.Automation, "🎁 AUTO COLLECT FREE GIFTS", 72)
+createDescriptionLabel(giftsCard, "Automatically redeems all free gifts periodically.")
+
+local giftsBtn = Instance.new("TextButton", giftsCard)
+giftsBtn.Size = UDim2.new(0.35, 0, 0, 28)
+giftsBtn.Position = UDim2.new(0.62, 0, 0, 30)
+giftsBtn.BackgroundColor3 = C_DANGER
+giftsBtn.Font = FONT_BOLD
+giftsBtn.RichText = true
+giftsBtn.Text = "<b>DISABLED</b>"
+giftsBtn.TextColor3 = C_TEXT
+giftsBtn.TextSize = 11
+Instance.new("UICorner", giftsBtn).CornerRadius = UDim.new(0, 6)
+
+local merchantCard = createCard(Tabs.Automation, "🛒 AUTO FARMING MERCHANT", 72)
+createDescriptionLabel(merchantCard, "Automatically purchases merchant items.")
+
+local merchantBtn = Instance.new("TextButton", merchantCard)
+merchantBtn.Size = UDim2.new(0.35, 0, 0, 28)
+merchantBtn.Position = UDim2.new(0.62, 0, 0, 30)
+merchantBtn.BackgroundColor3 = C_DANGER
+merchantBtn.Font = FONT_BOLD
+merchantBtn.RichText = true
+merchantBtn.Text = "<b>DISABLED</b>"
+merchantBtn.TextColor3 = C_TEXT
+merchantBtn.TextSize = 11
+Instance.new("UICorner", merchantBtn).CornerRadius = UDim.new(0, 6)
+
+local eventCard = createCard(Tabs.Automation, "🎉 AUTO JOIN EVENT", 72)
+createDescriptionLabel(eventCard, "Automatically joins event.")
+
+local eventBtn = Instance.new("TextButton", eventCard)
+eventBtn.Size = UDim2.new(0.35, 0, 0, 28)
+eventBtn.Position = UDim2.new(0.62, 0, 0, 30)
+eventBtn.BackgroundColor3 = C_DANGER
+eventBtn.Font = FONT_BOLD
+eventBtn.RichText = true
+eventBtn.Text = "<b>DISABLED</b>"
+eventBtn.TextColor3 = C_TEXT
+eventBtn.TextSize = 11
+Instance.new("UICorner", eventBtn).CornerRadius = UDim.new(0, 6)
+
+local autoPetsCoinsEventEnabled = false
+local petsCoinsCard = createCard(Tabs.Automation, "🍀 Auto Event Luck", 72)
+createDescriptionLabel(petsCoinsCard, "Automatically buys Huge, Titanic, and Gargantuan luck boosts.")
+
+local petsCoinsBtn = Instance.new("TextButton", petsCoinsCard)
+petsCoinsBtn.Size = UDim2.new(0.35, 0, 0, 28)
+petsCoinsBtn.Position = UDim2.new(0.62, 0, 0, 30)
+petsCoinsBtn.BackgroundColor3 = C_DANGER
+petsCoinsBtn.Font = FONT_BOLD
+petsCoinsBtn.RichText = true
+petsCoinsBtn.Text = "<b>DISABLED</b>"
+petsCoinsBtn.TextColor3 = C_TEXT
+petsCoinsBtn.TextSize = 11
+Instance.new("UICorner", petsCoinsBtn).CornerRadius = UDim.new(0, 6)
+
+petsCoinsBtn.MouseButton1Click:Connect(function()
+    autoPetsCoinsEventEnabled = not autoPetsCoinsEventEnabled
+    if autoPetsCoinsEventEnabled then
+        petsCoinsBtn.Text = "<b>ENABLED</b>"
+        petsCoinsBtn.BackgroundColor3 = C_SUCCESS
+    else
+        petsCoinsBtn.Text = "<b>DISABLED</b>"
+        petsCoinsBtn.BackgroundColor3 = C_DANGER
+    end
 end)
 
-ModalNo.MouseButton1Click:Connect(function()
-    ModalOverlay.Visible = false
+createSectionHeader(Tabs.Graphics, "UI Theme Customizer")
+
+local ThemePickersScroll = Instance.new("ScrollingFrame", Tabs.Graphics)
+ThemePickersScroll.Name = "ThemePickersScroll"
+ThemePickersScroll.Size = UDim2.new(1, 0, 0, 240)
+ThemePickersScroll.BackgroundTransparency = 1
+ThemePickersScroll.BorderSizePixel = 0
+ThemePickersScroll.ScrollBarThickness = 4
+ThemePickersScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+
+local themePickersLayout = Instance.new("UIListLayout", ThemePickersScroll)
+themePickersLayout.SortOrder = Enum.SortOrder.LayoutOrder
+themePickersLayout.Padding = UDim.new(0, 8)
+
+themePickersLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    ThemePickersScroll.CanvasSize = UDim2.new(0, 0, 0, themePickersLayout.AbsoluteContentSize.Y + 10)
 end)
+
+local function createModernColorPickerCard(parent, labelText, defaultColor, onColorChanged)
+    local card = createCard(parent, labelText, 72)
+    createDescriptionLabel(card, "Click to customize color for " .. labelText .. ".")
+    
+    local previewBtn = Instance.new("TextButton", card)
+    previewBtn.Size = UDim2.new(0.35, 0, 0, 28)
+    previewBtn.Position = UDim2.new(0.62, 0, 0, 30)
+    previewBtn.BackgroundColor3 = C_BUTTON
+    previewBtn.Font = FONT_BOLD
+    previewBtn.RichText = true
+    previewBtn.Text = "<b>PICK COLOR</b>"
+    previewBtn.TextColor3 = C_TEXT
+    previewBtn.TextSize = 11
+    Instance.new("UICorner", previewBtn).CornerRadius = UDim.new(0, 6)
+
+    table.insert(colorPickerButtonsList, previewBtn)
+
+    previewBtn.MouseButton1Click:Connect(function()
+        isColorPickerOpen = true
+        
+        local pickerFrame = Instance.new("Frame", ScreenGui)
+        pickerFrame.Size = UDim2.new(0, 340, 0, 220)
+        pickerFrame.Position = UDim2.new(0.5, -170, 0.5, -110)
+        pickerFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 26)
+        pickerFrame.BorderSizePixel = 0
+        pickerFrame.ZIndex = 300
+        Instance.new("UICorner", pickerFrame).CornerRadius = UDim.new(0, 12)
+        local pStroke = Instance.new("UIStroke", pickerFrame)
+        pStroke.Color = Color3.fromRGB(45, 45, 65)
+        pStroke.Thickness = 1
+
+        local pickerCloseBtn = Instance.new("TextButton", pickerFrame)
+        pickerCloseBtn.Size = UDim2.new(0, 20, 0, 20)
+        pickerCloseBtn.Position = UDim2.new(1, -22, 0, 12)
+        pickerCloseBtn.BackgroundTransparency = 1
+        pickerCloseBtn.Font = FONT_BOLD
+        pickerCloseBtn.RichText = true
+        pickerCloseBtn.Text = "<b>X</b>"
+        pickerCloseBtn.TextColor3 = Color3.fromRGB(160, 165, 180)
+        pickerCloseBtn.TextSize = 13
+        pickerCloseBtn.ZIndex = 305
+
+        pickerCloseBtn.MouseEnter:Connect(function()
+            pickerCloseBtn.TextColor3 = C_DANGER
+        end)
+        pickerCloseBtn.MouseLeave:Connect(function()
+            pickerCloseBtn.TextColor3 = Color3.fromRGB(160, 165, 180)
+        end)
+
+        local tLbl = Instance.new("TextLabel", pickerFrame)
+        tLbl.Size = UDim2.new(1, -40, 0, 22)
+        tLbl.Position = UDim2.new(0, 16, 0, 12)
+        tLbl.BackgroundTransparency = 1
+        tLbl.Font = FONT_BOLD
+        tLbl.RichText = true
+        tLbl.Text = '<b><font color="#7289DA">COLOR PICKER</font></b>'
+        tLbl.TextColor3 = C_TEXT
+        tLbl.TextSize = 12
+        tLbl.ZIndex = 301
+
+        local subLbl = Instance.new("TextLabel", pickerFrame)
+        subLbl.Size = UDim2.new(1, -40, 0, 14)
+        subLbl.Position = UDim2.new(0, 16, 0, 28)
+        subLbl.BackgroundTransparency = 1
+        subLbl.Font = FONT_MEDIUM
+        subLbl.RichText = true
+        subLbl.Text = "<b>SELECTION: " .. string.upper(labelText) .. "</b>"
+        subLbl.TextColor3 = Color3.fromRGB(120, 125, 145)
+        subLbl.TextSize = 8
+        subLbl.ZIndex = 301
+
+        local colorBox = Instance.new("Frame", pickerFrame)
+        colorBox.Size = UDim2.new(0, 65, 0, 65)
+        colorBox.Position = UDim2.new(0, 16, 0, 52)
+        colorBox.BackgroundColor3 = defaultColor
+        colorBox.BorderSizePixel = 0
+        colorBox.ZIndex = 301
+        Instance.new("UICorner", colorBox).CornerRadius = UDim.new(0, 8)
+
+        local currentH, currentS, currentV = defaultColor:ToHSV()
+        local hexInput, updatePickerColor
+
+        local sliderContainer = Instance.new("Frame", pickerFrame)
+        sliderContainer.Size = UDim2.new(0, 225, 0, 65)
+        sliderContainer.Position = UDim2.new(0, 96, 0, 52)
+        sliderContainer.BackgroundTransparency = 1
+        sliderContainer.ZIndex = 301
+
+        local function createMiniSlider(posY, gradientColors, callback)
+            local bar = Instance.new("Frame", sliderContainer)
+            bar.Size = UDim2.new(1, 0, 0, 14)
+            bar.Position = UDim2.new(0, 0, 0, posY)
+            bar.BackgroundColor3 = Color3.new(1, 1, 1)
+            bar.BorderSizePixel = 0
+            bar.ZIndex = 302
+            Instance.new("UICorner", bar).CornerRadius = UDim.new(0, 4)
+
+            local uig = Instance.new("UIGradient", bar)
+            uig.Color = ColorSequence.new(gradientColors)
+
+            local dragging = false
+            bar.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = true
+                end
+            end)
+            UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = false
+                end
+            end)
+            UserInputService.InputChanged:Connect(function(input)
+                if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                    local absPos = bar.AbsolutePosition.X
+                    local absSize = bar.AbsoluteSize.X
+                    local mouseX = input.Position.X
+                    local val = math.clamp((mouseX - absPos) / absSize, 0, 1)
+                    callback(val)
+                    updatePickerColor()
+                end
+            end)
+        end
+
+        updatePickerColor = function()
+            local col = Color3.fromHSV(currentH, currentS, currentV)
+            colorBox.BackgroundColor3 = col
+            if hexInput then
+                hexInput.Text = "#" .. string.format("%02X%02X%02X", math.floor(col.R * 255), math.floor(col.G * 255), math.floor(col.B * 255))
+            end
+            onColorChanged(col)
+            updateAllDynamicElementsColor()
+        end
+
+        createMiniSlider(0, {
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+            ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 255, 0)),
+            ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 255, 0)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 255, 255)),
+            ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0, 0, 255)),
+            ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 0, 255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
+        }, function(v) currentH = v end)
+
+        createMiniSlider(24, {ColorSequenceKeypoint.new(0, Color3.fromRGB(100, 100, 100)), ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))}, function(v) currentS = v end)
+        createMiniSlider(48, {ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 0, 0)), ColorSequenceKeypoint.new(1, Color3.fromRGB(200, 200, 200))}, function(v) currentV = v end)
+
+        hexInput = Instance.new("TextBox", pickerFrame)
+        hexInput.Size = UDim2.new(0, 100, 0, 32)
+        hexInput.Position = UDim2.new(0, 16, 0, 136)
+        hexInput.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
+        hexInput.Font = FONT_BOLD
+        hexInput.Text = "#" .. string.format("%02X%02X%02X", math.floor(defaultColor.R*255), math.floor(defaultColor.G*255), math.floor(defaultColor.B*255))
+        hexInput.TextColor3 = C_TEXT
+        hexInput.TextSize = 10
+        hexInput.ZIndex = 301
+        Instance.new("UICorner", hexInput).CornerRadius = UDim.new(0, 6)
+
+        hexInput.FocusLost:Connect(function(enter)
+            if enter then
+                local cleanHex = hexInput.Text:gsub("#", "")
+                if #cleanHex == 6 then
+                    local r = tonumber(cleanHex:sub(1, 2), 16)
+                    local g = tonumber(cleanHex:sub(3, 4), 16)
+                    local b = tonumber(cleanHex:sub(5, 6), 16)
+                    if r and g and b then
+                        local newCol = Color3.fromRGB(r, g, b)
+                        currentH, currentS, currentV = newCol:ToHSV()
+                        updatePickerColor()
+                    end
+                end
+            end
+        end)
+
+        local applyPickerBtn = Instance.new("TextButton", pickerFrame)
+        applyPickerBtn.Size = UDim2.new(0, 192, 0, 32)
+        applyPickerBtn.Position = UDim2.new(0, 128, 0, 136)
+        applyPickerBtn.BackgroundColor3 = C_SUCCESS
+        applyPickerBtn.Font = FONT_BOLD
+        applyPickerBtn.RichText = true
+        applyPickerBtn.Text = "<b>APPLY COLOR</b>"
+        applyPickerBtn.TextColor3 = C_TEXT
+        applyPickerBtn.TextSize = 10
+        applyPickerBtn.ZIndex = 301
+        Instance.new("UICorner", applyPickerBtn).CornerRadius = UDim.new(0, 6)
+
+        local function closePicker()
+            isColorPickerOpen = false
+            pickerFrame:Destroy()
+        end
+
+        applyPickerBtn.MouseButton1Click:Connect(function()
+            closePicker()
+        end)
+
+        pickerCloseBtn.MouseButton1Click:Connect(function()
+            closePicker()
+        end)
+    end)
+
+    return card
+end
+
+createModernColorPickerCard(ThemePickersScroll, "Menu Background Color", C_BG, function(c)
+    C_BG = c
+    MainFrame.BackgroundColor3 = c
+end)
+
+createModernColorPickerCard(ThemePickersScroll, "Sidebar Background Color", C_SIDEBAR, function(c)
+    C_SIDEBAR = c
+    Sidebar.BackgroundColor3 = c
+end)
+
+createModernColorPickerCard(ThemePickersScroll, "Card Elements Color", C_CARD, function(c)
+    C_CARD = c
+    for _, card in ipairs(cardsList) do
+        if card and card.Parent then
+            card.BackgroundColor3 = c
+        end
+    end
+end)
+
+createModernColorPickerCard(ThemePickersScroll, "Profile Card Color", C_PROFILE, function(c)
+    C_PROFILE = c
+    if ProfileCard and ProfileCard.Parent then
+        ProfileCard.BackgroundColor3 = c
+    end
+end)
+
+createModernColorPickerCard(ThemePickersScroll, "Containers Background", C_CONTAINERS, function(c)
+    C_CONTAINERS = c
+    for _, container in ipairs(containerFramesList) do
+        if container and container.Parent then
+            container.BackgroundColor3 = c
+        end
+    end
+end)
+
+createModernColorPickerCard(ThemePickersScroll, "Dashboard Stats Live Color", C_DASHBOARD_LIVE, function(c)
+    C_DASHBOARD_LIVE = c
+    updateAllDynamicElementsColor()
+end)
+
+createModernColorPickerCard(ThemePickersScroll, "Selection & Accent Color", C_ACCENT, function(c)
+    C_ACCENT = c
+    updateAllDynamicElementsColor()
+end)
+
+createModernColorPickerCard(ThemePickersScroll, "Button Elements Color", C_BUTTON, function(c)
+    C_BUTTON = c
+    updateAllDynamicElementsColor()
+end)
+
+createModernColorPickerCard(ThemePickersScroll, "Section Header Text Color", C_SECTION_HEADER, function(c)
+    C_SECTION_HEADER = c
+    updateAllDynamicElementsColor()
+end)
+
+createModernColorPickerCard(ThemePickersScroll, "Preset Selection Color", C_PRESET_SELECTION, function(c)
+    C_PRESET_SELECTION = c
+    updateAllDynamicElementsColor()
+end)
+
+createModernColorPickerCard(ThemePickersScroll, "Config Selection Color", C_CONFIG_SELECTION, function(c)
+    C_CONFIG_SELECTION = c
+    updateAllDynamicElementsColor()
+end)
+
+createSectionHeader(Tabs.Graphics, "Style Presets")
+
+local presetsCard = createCard(Tabs.Graphics, "💾 PRESETS & CONFIGURATION", 200)
+
+local presetSelectScroll = Instance.new("ScrollingFrame", presetsCard)
+presetSelectScroll.Size = UDim2.new(0.58, -10, 0, 134)
+presetSelectScroll.Position = UDim2.new(0, 12, 0, 52)
+presetSelectScroll.BackgroundColor3 = C_CONTAINERS
+presetSelectScroll.BorderSizePixel = 0
+presetSelectScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+presetSelectScroll.ScrollBarThickness = 3
+Instance.new("UICorner", presetSelectScroll).CornerRadius = UDim.new(0, 6)
+table.insert(containerFramesList, presetSelectScroll)
+
+local presetSelectPadding = Instance.new("UIPadding", presetSelectScroll)
+presetSelectPadding.PaddingTop = UDim.new(0, 8)
+
+local presetListLayout = Instance.new("UIListLayout", presetSelectScroll)
+presetListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+presetListLayout.Padding = UDim.new(0, 3)
+
+local loadPresetBtn = Instance.new("TextButton", presetsCard)
+loadPresetBtn.Size = UDim2.new(0.38, 0, 0, 33)
+loadPresetBtn.Position = UDim2.new(0.60, 0, 0, 48)
+loadPresetBtn.BackgroundColor3 = C_BUTTON
+table.insert(staticAccentButtonsList, loadPresetBtn)
+loadPresetBtn.Font = FONT_BOLD
+loadPresetBtn.RichText = true
+loadPresetBtn.Text = "<b>LOAD PRESET</b>"
+loadPresetBtn.TextColor3 = C_TEXT
+loadPresetBtn.TextSize = 10
+Instance.new("UICorner", loadPresetBtn).CornerRadius = UDim.new(0, 6)
+
+local savePresetBtn = Instance.new("TextButton", presetsCard)
+savePresetBtn.Size = UDim2.new(0.38, 0, 0, 33)
+savePresetBtn.Position = UDim2.new(0.60, 0, 0, 86)
+savePresetBtn.BackgroundColor3 = C_SUCCESS
+savePresetBtn.Font = FONT_BOLD
+savePresetBtn.RichText = true
+savePresetBtn.Text = "<b>SAVE PRESET</b>"
+savePresetBtn.TextColor3 = C_TEXT
+savePresetBtn.TextSize = 10
+Instance.new("UICorner", savePresetBtn).CornerRadius = UDim.new(0, 6)
+
+local deletePresetBtn = Instance.new("TextButton", presetsCard)
+deletePresetBtn.Size = UDim2.new(0.38, 0, 0, 33)
+deletePresetBtn.Position = UDim2.new(0.60, 0, 0, 124)
+deletePresetBtn.BackgroundColor3 = C_DANGER
+deletePresetBtn.Font = FONT_BOLD
+deletePresetBtn.RichText = true
+deletePresetBtn.Text = "<b>DELETE CONFIG</b>"
+deletePresetBtn.TextColor3 = C_TEXT
+deletePresetBtn.TextSize = 10
+Instance.new("UICorner", deletePresetBtn).CornerRadius = UDim.new(0, 6)
+
+rebuildPresetSelectionList = function()
+    for _, child in ipairs(presetSelectScroll:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+
+    local count = 0
+    for name, pData in pairs(savedThemePresets) do
+        count = count + 1
+        local itemBtn = Instance.new("TextButton", presetSelectScroll)
+        itemBtn.Size = UDim2.new(1, -4, 0, 24)
+        itemBtn.BackgroundColor3 = (selectedPresetName == name) and C_ACCENT or C_PRESET_SELECTION
+        itemBtn.Font = FONT_MEDIUM
+        itemBtn.RichText = true
+        itemBtn.Text = "<b>" .. name .. "</b>"
+        itemBtn.TextColor3 = C_TEXT
+        itemBtn.TextSize = 10
+        Instance.new("UICorner", itemBtn).CornerRadius = UDim.new(0, 4)
+
+        presetButtonsMap[name] = itemBtn
+
+        itemBtn.MouseButton1Click:Connect(function()
+            selectedPresetName = name
+            for n, btn in pairs(presetButtonsMap) do
+                if btn and btn.Parent then
+                    btn.BackgroundColor3 = (n == selectedPresetName) and C_ACCENT or C_PRESET_SELECTION
+                end
+            end
+        end)
+    end
+    presetSelectScroll.CanvasSize = UDim2.new(0, 0, 0, (count * 28) + 4)
+end
+
+rebuildPresetSelectionList()
+
+loadPresetBtn.MouseButton1Click:Connect(function()
+    local pData = savedThemePresets[selectedPresetName]
+    if pData then
+        C_BG = pData.BG
+        C_SIDEBAR = pData.SIDEBAR
+        C_CARD = pData.CARD
+        C_PROFILE = pData.PROFILE or Color3.fromRGB(18, 18, 25)
+        C_ACCENT = pData.ACCENT or C_ACCENT
+        C_BUTTON = pData.BUTTON or C_ACCENT
+        C_SECTION_HEADER = pData.SECTION_HEADER or C_ACCENT
+        C_STATBOX = pData.STATBOX or Color3.fromRGB(18, 18, 25)
+        C_DASHBOARD_LIVE = pData.DASHBOARD_LIVE or Color3.fromRGB(18, 18, 25)
+        C_CONTAINERS = pData.CONTAINERS or Color3.fromRGB(18, 18, 26)
+        C_PRESET_SELECTION = pData.PRESET_SELECTION or Color3.fromRGB(24, 24, 34)
+        C_CONFIG_SELECTION = pData.CONFIG_SELECTION or Color3.fromRGB(24, 24, 34)
+        
+        MainFrame.BackgroundColor3 = C_BG
+        Sidebar.BackgroundColor3 = C_SIDEBAR
+        ProfileCard.BackgroundColor3 = C_PROFILE
+        
+        for _, card in ipairs(cardsList) do
+            if card and card.Parent then
+                card.BackgroundColor3 = C_CARD
+            end
+        end
+        
+        updateAllDynamicElementsColor()
+        rebuildPresetSelectionList()
+        rebuildConfigSelectionList()
+        
+        sendNotification("Preset Loaded", "Loaded theme: " .. selectedPresetName, 3)
+    end
+end)
+
+local function showInputDialog(titleText, descText, placeholderText, onConfirm, onCancel)
+    local DialogOverlay = Instance.new("Frame", ScreenGui)
+    DialogOverlay.Size = UDim2.new(1, 0, 1, 36)
+    DialogOverlay.Position = UDim2.new(0, 0, 0, -36)
+    DialogOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    DialogOverlay.BackgroundTransparency = 1
+    DialogOverlay.ZIndex = 100
+
+    local DialogBox = Instance.new("Frame", DialogOverlay)
+    DialogBox.Size = UDim2.new(0, 0, 0, 0)
+    DialogBox.Position = UDim2.new(0.5, 0, 0.5, 0)
+    DialogBox.BackgroundColor3 = C_BG
+    DialogBox.BorderSizePixel = 0
+    DialogBox.ClipsDescendants = true
+    DialogBox.ZIndex = 101
+    Instance.new("UICorner", DialogBox).CornerRadius = UDim.new(0, 12)
+    
+    local DialogStroke = Instance.new("UIStroke", DialogBox)
+    DialogStroke.Color = Color3.fromRGB(60, 60, 80)
+    DialogStroke.Thickness = 1
+
+    local DTitle = Instance.new("TextLabel", DialogBox)
+    DTitle.Size = UDim2.new(1, -30, 0, 30)
+    DTitle.Position = UDim2.new(0, 15, 0, 15)
+    DTitle.BackgroundTransparency = 1
+    DTitle.Font = FONT_BOLD
+    DTitle.RichText = true
+    DTitle.Text = "<b>" .. titleText .. "</b>"
+    DTitle.TextColor3 = C_TEXT
+    DTitle.TextSize = 14
+    DTitle.TextXAlignment = Enum.TextXAlignment.Left
+    DTitle.ZIndex = 102
+
+    local DDesc = Instance.new("TextLabel", DialogBox)
+    DDesc.Size = UDim2.new(1, -30, 0, 30)
+    DDesc.Position = UDim2.new(0, 15, 0, 45)
+    DDesc.BackgroundTransparency = 1
+    DDesc.Font = FONT_MEDIUM
+    DDesc.RichText = true
+    DDesc.Text = "<b>" .. descText .. "</b>"
+    DDesc.TextColor3 = C_SUBTEXT
+    DDesc.TextSize = 11
+    DDesc.TextXAlignment = Enum.TextXAlignment.Left
+    DDesc.ZIndex = 102
+
+    local InputBox = Instance.new("TextBox", DialogBox)
+    InputBox.Size = UDim2.new(1, -30, 0, 34)
+    InputBox.Position = UDim2.new(0, 15, 0, 78)
+    InputBox.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+    InputBox.Font = FONT_BOLD
+    InputBox.PlaceholderText = placeholderText or "Enter name..."
+    InputBox.Text = ""
+    InputBox.TextColor3 = C_TEXT
+    InputBox.TextSize = 11
+    InputBox.ZIndex = 102
+    Instance.new("UICorner", InputBox).CornerRadius = UDim.new(0, 8)
+
+    local function closeDialog()
+        TweenService:Create(DialogOverlay, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(DialogBox, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+            Size = UDim2.new(0, 0, 0, 0),
+            Position = UDim2.new(0.5, 0, 0.5, 0)
+        }):Play()
+        task.wait(0.2)
+        DialogOverlay:Destroy()
+    end
+
+    local ContinueBtn = Instance.new("TextButton", DialogBox)
+    ContinueBtn.Size = UDim2.new(0.48, -5, 0, 34)
+    ContinueBtn.Position = UDim2.new(0, 15, 1, -45)
+    ContinueBtn.BackgroundColor3 = C_SUCCESS
+    ContinueBtn.Font = FONT_BOLD
+    ContinueBtn.RichText = true
+    ContinueBtn.Text = "<b>CONTINUE</b>"
+    ContinueBtn.TextColor3 = C_TEXT
+    ContinueBtn.TextSize = 11
+    ContinueBtn.ZIndex = 102
+    Instance.new("UICorner", ContinueBtn).CornerRadius = UDim.new(0, 8)
+
+    local CancelBtn = Instance.new("TextButton", DialogBox)
+    CancelBtn.Size = UDim2.new(0.48, -5, 0, 34)
+    CancelBtn.Position = UDim2.new(0.52, 0, 1, -45)
+    CancelBtn.BackgroundColor3 = C_DANGER
+    CancelBtn.Font = FONT_BOLD
+    CancelBtn.RichText = true
+    CancelBtn.Text = "<b>CANCEL</b>"
+    CancelBtn.TextColor3 = C_TEXT
+    CancelBtn.TextSize = 11
+    CancelBtn.ZIndex = 102
+    Instance.new("UICorner", CancelBtn).CornerRadius = UDim.new(0, 8)
+
+    ContinueBtn.MouseButton1Click:Connect(function()
+        local textVal = InputBox.Text
+        closeDialog()
+        if onConfirm then onConfirm(textVal) end
+    end)
+
+    CancelBtn.MouseButton1Click:Connect(function()
+        closeDialog()
+        if onCancel then onCancel() end
+    end)
+
+    TweenService:Create(DialogOverlay, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.4}):Play()
+    TweenService:Create(DialogBox, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 350, 0, 185),
+        Position = UDim2.new(0.5, -175, 0.5, -92.5)
+    }):Play()
+end
+
+savePresetBtn.MouseButton1Click:Connect(function()
+    showInputDialog(
+        "💾 Save Custom Preset",
+        "Enter a name for your custom color preset:",
+        "My Custom Theme",
+        function(presetName)
+            if presetName and presetName ~= "" then
+                savedThemePresets[presetName] = {
+                    BG = C_BG,
+                    SIDEBAR = C_SIDEBAR,
+                    CARD = C_CARD,
+                    PROFILE = C_PROFILE,
+                    ACCENT = C_ACCENT,
+                    BUTTON = C_BUTTON,
+                    SECTION_HEADER = C_SECTION_HEADER,
+                    STATBOX = C_STATBOX,
+                    DASHBOARD_LIVE = C_DASHBOARD_LIVE,
+                    CONTAINERS = C_CONTAINERS,
+                    PRESET_SELECTION = C_PRESET_SELECTION,
+                    CONFIG_SELECTION = C_CONFIG_SELECTION
+                }
+                savePresetsToFile()
+                selectedPresetName = presetName
+                rebuildPresetSelectionList()
+                sendNotification("Preset Saved", "Successfully saved preset: " .. presetName, 3)
+            else
+                sendNotification("Error", "Preset name cannot be empty!", 3)
+            end
+        end,
+        function() end
+    )
+end)
+
+local function showConfirmDialogCustom(titleText, descText, onConfirm)
+    local DialogOverlay = Instance.new("Frame", ScreenGui)
+    DialogOverlay.Size = UDim2.new(1, 0, 1, 36)
+    DialogOverlay.Position = UDim2.new(0, 0, 0, -36)
+    DialogOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    DialogOverlay.BackgroundTransparency = 1
+    DialogOverlay.ZIndex = 100
+
+    local DialogBox = Instance.new("Frame", DialogOverlay)
+    DialogBox.Size = UDim2.new(0, 0, 0, 0)
+    DialogBox.Position = UDim2.new(0.5, 0, 0.5, 0)
+    DialogBox.BackgroundColor3 = C_BG
+    DialogBox.BorderSizePixel = 0
+    DialogBox.ClipsDescendants = true
+    DialogBox.ZIndex = 101
+    Instance.new("UICorner", DialogBox).CornerRadius = UDim.new(0, 12)
+    
+    local DialogStroke = Instance.new("UIStroke", DialogBox)
+    DialogStroke.Color = Color3.fromRGB(60, 60, 80)
+    DialogStroke.Thickness = 1
+
+    local DTitle = Instance.new("TextLabel", DialogBox)
+    DTitle.Size = UDim2.new(1, -30, 0, 30)
+    DTitle.Position = UDim2.new(0, 15, 0, 15)
+    DTitle.BackgroundTransparency = 1
+    DTitle.Font = FONT_BOLD
+    DTitle.RichText = true
+    DTitle.Text = "<b>" .. titleText .. "</b>"
+    DTitle.TextColor3 = C_TEXT
+    DTitle.TextSize = 14
+    DTitle.TextXAlignment = Enum.TextXAlignment.Left
+    DTitle.ZIndex = 102
+
+    local DDesc = Instance.new("TextLabel", DialogBox)
+    DDesc.Size = UDim2.new(1, -30, 0, 45)
+    DDesc.Position = UDim2.new(0, 15, 0, 45)
+    DDesc.BackgroundTransparency = 1
+    DDesc.Font = FONT_MEDIUM
+    DDesc.RichText = true
+    DDesc.Text = "<b>" .. descText .. "</b>"
+    DDesc.TextColor3 = C_SUBTEXT
+    DDesc.TextSize = 11
+    DDesc.TextWrapped = true
+    DDesc.TextXAlignment = Enum.TextXAlignment.Left
+    DDesc.ZIndex = 102
+
+    local function closeDialog()
+        TweenService:Create(DialogOverlay, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(DialogBox, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+            Size = UDim2.new(0, 0, 0, 0),
+            Position = UDim2.new(0.5, 0, 0.5, 0)
+        }):Play()
+        task.wait(0.2)
+        DialogOverlay:Destroy()
+    end
+
+    local ContinueBtn = Instance.new("TextButton", DialogBox)
+    ContinueBtn.Size = UDim2.new(0.48, -5, 0, 34)
+    ContinueBtn.Position = UDim2.new(0, 15, 1, -45)
+    ContinueBtn.BackgroundColor3 = C_DANGER
+    ContinueBtn.Font = FONT_BOLD
+    ContinueBtn.RichText = true
+    ContinueBtn.Text = "<b>CONTINUE</b>"
+    ContinueBtn.TextColor3 = C_TEXT
+    ContinueBtn.TextSize = 11
+    ContinueBtn.ZIndex = 102
+    Instance.new("UICorner", ContinueBtn).CornerRadius = UDim.new(0, 8)
+
+    local CancelBtn = Instance.new("TextButton", DialogBox)
+    CancelBtn.Size = UDim2.new(0.48, -5, 0, 34)
+    CancelBtn.Position = UDim2.new(0.52, 0, 1, -45)
+    CancelBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+    CancelBtn.Font = FONT_BOLD
+    CancelBtn.RichText = true
+    CancelBtn.Text = "<b>CANCEL</b>"
+    CancelBtn.TextColor3 = C_TEXT
+    CancelBtn.TextSize = 11
+    CancelBtn.ZIndex = 102
+    Instance.new("UICorner", CancelBtn).CornerRadius = UDim.new(0, 8)
+
+    ContinueBtn.MouseButton1Click:Connect(function()
+        closeDialog()
+        if onConfirm then onConfirm() end
+    end)
+
+    CancelBtn.MouseButton1Click:Connect(function()
+        closeDialog()
+    end)
+
+    TweenService:Create(DialogOverlay, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.4}):Play()
+    TweenService:Create(DialogBox, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 350, 0, 160),
+        Position = UDim2.new(0.5, -175, 0.5, -80)
+    }):Play()
+end
+
+deletePresetBtn.MouseButton1Click:Connect(function()
+    if not selectedPresetName then
+        sendNotification("Error", "No preset selected!", 3)
+        return
+    end
+
+    showConfirmDialogCustom(
+        "🗑️ Delete Preset",
+        "Are you sure you want to delete the preset '" .. selectedPresetName .. "'? This action cannot be undone.",
+        function()
+            if savedThemePresets[selectedPresetName] then
+                savedThemePresets[selectedPresetName] = nil
+                savePresetsToFile()
+                
+                local nextPreset = next(savedThemePresets)
+                if nextPreset then
+                    selectedPresetName = nextPreset
+                else
+                    selectedPresetName = ""
+                end
+                
+                rebuildPresetSelectionList()
+                sendNotification("Preset Deleted", "Successfully deleted configuration.", 3)
+            end
+        end
+    )
+end)
+
+createSectionHeader(Tabs.Graphics, "Performance & Visuals")
+
+local render3dCard = createCard(Tabs.Graphics, "🖥️ DISABLE 3D RENDERING", 72)
+createDescriptionLabel(render3dCard, "Turns screen black to save GPU usage.")
+
+local render3dBtn = Instance.new("TextButton", render3dCard)
+render3dBtn.Size = UDim2.new(0.35, 0, 0, 28)
+render3dBtn.Position = UDim2.new(0.62, 0, 0, 30)
+render3dBtn.BackgroundColor3 = C_DANGER
+render3dBtn.Font = FONT_BOLD
+render3dBtn.RichText = true
+render3dBtn.Text = "<b>DISABLED</b>"
+render3dBtn.TextColor3 = C_TEXT
+render3dBtn.TextSize = 11
+Instance.new("UICorner", render3dBtn).CornerRadius = UDim.new(0, 6)
+
+local potatoCard = createCard(Tabs.Graphics, "🥔 POTATO MODE (DESTRUCTIVE)", 72)
+createDescriptionLabel(potatoCard, "Lowers graphics & destroys textures.")
+
+local potatoBtn = Instance.new("TextButton", potatoCard)
+potatoBtn.Size = UDim2.new(0.35, 0, 0, 28)
+potatoBtn.Position = UDim2.new(0.62, 0, 0, 30)
+potatoBtn.BackgroundColor3 = C_DANGER
+potatoBtn.Font = FONT_BOLD
+potatoBtn.RichText = true
+potatoBtn.Text = "<b>DISABLED</b>"
+potatoBtn.TextColor3 = C_TEXT
+potatoBtn.TextSize = 11
+Instance.new("UICorner", potatoBtn).CornerRadius = UDim.new(0, 6)
+
+createSectionHeader(Tabs.Settings, "Server Management")
+
+local rejoinCard = createCard(Tabs.Settings, "🔄 REJOIN SERVER", 72)
+createDescriptionLabel(rejoinCard, "Reconnects you to the same server instantly.")
+local rejoinBtn = Instance.new("TextButton", rejoinCard)
+rejoinBtn.Size = UDim2.new(0.35, 0, 0, 28)
+rejoinBtn.Position = UDim2.new(0.62, 0, 0, 30)
+rejoinBtn.BackgroundColor3 = C_BUTTON
+table.insert(staticAccentButtonsList, rejoinBtn)
+rejoinBtn.Font = FONT_BOLD
+rejoinBtn.RichText = true
+rejoinBtn.Text = "<b>REJOIN</b>"
+rejoinBtn.TextColor3 = C_TEXT
+rejoinBtn.TextSize = 11
+Instance.new("UICorner", rejoinBtn).CornerRadius = UDim.new(0, 6)
+
+local hopCard = createCard(Tabs.Settings, "🔀 SERVER HOP", 72)
+createDescriptionLabel(hopCard, "Finds and joins a different public server.")
+local hopBtn = Instance.new("TextButton", hopCard)
+hopBtn.Size = UDim2.new(0.35, 0, 0, 28)
+hopBtn.Position = UDim2.new(0.62, 0, 0, 30)
+hopBtn.BackgroundColor3 = C_BUTTON
+table.insert(staticAccentButtonsList, hopBtn)
+hopBtn.Font = FONT_BOLD
+hopBtn.RichText = true
+hopBtn.Text = "<b>SERVER HOP</b>"
+hopBtn.TextColor3 = C_TEXT
+hopBtn.TextSize = 11
+Instance.new("UICorner", hopBtn).CornerRadius = UDim.new(0, 6)
+
+createSectionHeader(Tabs.Settings, "Settings & Control")
+
+local keybindCard = createCard(Tabs.Settings, "⌨️ MENU TOGGLE KEYBIND", 72)
+createDescriptionLabel(keybindCard, "Click button to rebind menu key.")
+local keybindBtn = Instance.new("TextButton", keybindCard)
+keybindBtn.Size = UDim2.new(0.35, 0, 0, 28)
+keybindBtn.Position = UDim2.new(0.62, 0, 0, 30)
+keybindBtn.BackgroundColor3 = C_BUTTON
+table.insert(staticAccentButtonsList, keybindBtn)
+keybindBtn.Font = FONT_BOLD
+keybindBtn.RichText = true
+keybindBtn.Text = "<b>Key: Insert</b>"
+keybindBtn.TextColor3 = C_TEXT
+keybindBtn.TextSize = 11
+Instance.new("UICorner", keybindBtn).CornerRadius = UDim.new(0, 6)
+
+local unloadCard = createCard(Tabs.Settings, "🚪 UNLOAD SCRIPT", 72)
+createDescriptionLabel(unloadCard, "Shuts down all tasks and removes UI.")
+local unloadBtn = Instance.new("TextButton", unloadCard)
+unloadBtn.Size = UDim2.new(0.35, 0, 0, 28)
+unloadBtn.Position = UDim2.new(0.62, 0, 0, 30)
+unloadBtn.BackgroundColor3 = C_DANGER
+unloadBtn.Font = FONT_BOLD
+unloadBtn.RichText = true
+unloadBtn.Text = "<b>UNLOAD</b>"
+unloadBtn.TextColor3 = C_TEXT
+unloadBtn.TextSize = 11
+Instance.new("UICorner", unloadBtn).CornerRadius = UDim.new(0, 6)
 
 local function makeDraggable(frame)
     local dragging, dragInput, dragStart, startPos
     frame.InputBegan:Connect(function(input)
+        if isColorPickerOpen then return end
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
@@ -740,7 +1676,7 @@ local function makeDraggable(frame)
         end
     end)
     UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
+        if not isColorPickerOpen and input == dragInput and dragging then
             local delta = input.Position - dragStart
             frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
@@ -748,9 +1684,103 @@ local function makeDraggable(frame)
 end
 makeDraggable(MainFrame)
 
+local function showConfirmDialog(titleText, descText, onConfirm, onCancel)
+    local DialogOverlay = Instance.new("Frame", ScreenGui)
+    DialogOverlay.Size = UDim2.new(1, 0, 1, 36)
+    DialogOverlay.Position = UDim2.new(0, 0, 0, -36)
+    DialogOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    DialogOverlay.BackgroundTransparency = 1
+    DialogOverlay.ZIndex = 100
+
+    local DialogBox = Instance.new("Frame", DialogOverlay)
+    DialogBox.Size = UDim2.new(0, 0, 0, 0)
+    DialogBox.Position = UDim2.new(0.5, 0, 0.5, 0)
+    DialogBox.BackgroundColor3 = C_BG
+    DialogBox.BorderSizePixel = 0
+    DialogBox.ClipsDescendants = true
+    DialogBox.ZIndex = 101
+    Instance.new("UICorner", DialogBox).CornerRadius = UDim.new(0, 12)
+    
+    local DialogStroke = Instance.new("UIStroke", DialogBox)
+    DialogStroke.Color = Color3.fromRGB(60, 60, 80)
+    DialogStroke.Thickness = 1
+
+    local DTitle = Instance.new("TextLabel", DialogBox)
+    DTitle.Size = UDim2.new(1, -30, 0, 30)
+    DTitle.Position = UDim2.new(0, 15, 0, 15)
+    DTitle.BackgroundTransparency = 1
+    DTitle.Font = FONT_BOLD
+    DTitle.RichText = true
+    DTitle.Text = "<b>" .. titleText .. "</b>"
+    DTitle.TextColor3 = C_TEXT
+    DTitle.TextSize = 14
+    DTitle.TextXAlignment = Enum.TextXAlignment.Left
+    DTitle.ZIndex = 102
+
+    local DDesc = Instance.new("TextLabel", DialogBox)
+    DDesc.Size = UDim2.new(1, -30, 0, 50)
+    DDesc.Position = UDim2.new(0, 15, 0, 45)
+    DDesc.BackgroundTransparency = 1
+    DDesc.Font = FONT_MEDIUM
+    DDesc.RichText = true
+    DDesc.Text = "<b>" .. descText .. "</b>"
+    DDesc.TextColor3 = C_SUBTEXT
+    DDesc.TextSize = 11
+    DDesc.TextWrapped = true
+    DDesc.TextXAlignment = Enum.TextXAlignment.Left
+    DDesc.ZIndex = 102
+
+    local function closeDialog()
+        TweenService:Create(DialogOverlay, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(DialogBox, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+            Size = UDim2.new(0, 0, 0, 0),
+            Position = UDim2.new(0.5, 0, 0.5, 0)
+        }):Play()
+        task.wait(0.2)
+        DialogOverlay:Destroy()
+    end
+
+    local OKBtn = Instance.new("TextButton", DialogBox)
+    OKBtn.Size = UDim2.new(1, -30, 0, 34)
+    OKBtn.Position = UDim2.new(0, 15, 1, -45)
+    OKBtn.BackgroundColor3 = C_BUTTON
+    table.insert(staticAccentButtonsList, OKBtn)
+    OKBtn.Font = FONT_BOLD
+    OKBtn.RichText = true
+    OKBtn.Text = "<b>CONTINUE</b>"
+    OKBtn.TextColor3 = C_TEXT
+    OKBtn.TextSize = 11
+    OKBtn.ZIndex = 102
+    Instance.new("UICorner", OKBtn).CornerRadius = UDim.new(0, 8)
+
+    OKBtn.MouseButton1Click:Connect(function()
+        closeDialog()
+        if onConfirm then onConfirm() end
+    end)
+
+    TweenService:Create(DialogOverlay, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.4}):Play()
+    TweenService:Create(DialogBox, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 350, 0, 165),
+        Position = UDim2.new(0.5, -175, 0.5, -82.5)
+    }):Play()
+end
+
+showConfirmDialog(
+    "⚠️ K Hub Notice ", 
+    "K Hub is completely free to use. If you paid money to obtain this script, you have been scammed! Click Continue to launch.", 
+    function()
+        MainFrame.Visible = true
+        TweenService:Create(MainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, 620, 0, 420),
+            BackgroundTransparency = 0
+        }):Play()
+        sendNotification("K Hub Injected", "Script successfully loaded & executed!", 4)
+    end
+)
+
 keybindBtn.MouseButton1Click:Connect(function()
     isListeningForKey = true
-    keybindBtn.Text = "Press Any Key..."
+    keybindBtn.Text = "<b>Press Any Key...</b>"
     keybindBtn.BackgroundColor3 = Color3.fromRGB(200, 150, 0)
 end)
 
@@ -761,8 +1791,8 @@ inputConnection = UserInputService.InputBegan:Connect(function(input, gameProces
     if isListeningForKey then
         if input.UserInputType == Enum.UserInputType.Keyboard then
             currentToggleKey = input.KeyCode
-            keybindBtn.Text = "Key: " .. currentToggleKey.Name
-            keybindBtn.BackgroundColor3 = C_ACCENT
+            keybindBtn.Text = "<b>Key: " .. currentToggleKey.Name .. "</b>"
+            keybindBtn.BackgroundColor3 = C_BUTTON
             isListeningForKey = false
         end
         return
@@ -786,12 +1816,12 @@ fpsBtn.MouseButton1Click:Connect(function()
     isCustomFPS = not isCustomFPS
     if isCustomFPS then
         applyFPSCap(customFPS)
-        fpsBtn.Text = "FPS: " .. customFPS
+        fpsBtn.Text = "<b>FPS: " .. customFPS .. "</b>"
         fpsBtn.BackgroundColor3 = C_DANGER
     else
         applyFPSCap(normalFPS)
-        fpsBtn.Text = "FPS: Normal"
-        fpsBtn.BackgroundColor3 = C_ACCENT
+        fpsBtn.Text = "<b>FPS: Normal</b>"
+        fpsBtn.BackgroundColor3 = C_BUTTON
     end
 end)
 
@@ -799,72 +1829,49 @@ fpsInput.FocusLost:Connect(function(enter)
     if enter then validateFPSInput() end
 end)
 
-afkBtn.MouseButton1Click:Connect(function()
-    antiAfkEnabled = not antiAfkEnabled
-    afkBtn.Text = antiAfkEnabled and "ENABLED" or "DISABLED"
-    afkBtn.BackgroundColor3 = antiAfkEnabled and C_SUCCESS or C_DANGER
-    afkStatusLabel.Text = antiAfkEnabled and "Status: Active" or "Status: Disabled"
-    afkStatusLabel.TextColor3 = antiAfkEnabled and C_SUCCESS or C_DANGER
-end)
-
-autoHatchBtn.MouseButton1Click:Connect(function()
-    if not autoHatchEnabled then
-        if not currentEggId then
-            autoHatchEnabled = false
-            autoHatchBtn.Text = "DISABLED"
-            autoHatchBtn.BackgroundColor3 = C_DANGER
-            
-            showWarning(
-                "⚠️ MISSING EGG ID",
-                "Manually hatch the Garden Egg 1 time first to capture its ID! After doing that, press ENABLE again.",
-                true
-            )
-            return
-        end
-        
-        autoHatchEnabled = true
-        autoHatchBtn.Text = "ENABLED"
-        autoHatchBtn.BackgroundColor3 = C_SUCCESS
-        tpToEgg(currentEggId)
-        task.wait(0.1)
-        setPlayerFrozen(true)
-    else
-        autoHatchEnabled = false
-        autoHatchBtn.Text = "DISABLED"
-        autoHatchBtn.BackgroundColor3 = C_DANGER
-        setPlayerFrozen(false)
-    end
-end)
-
 giftsBtn.MouseButton1Click:Connect(function()
     autoGiftsEnabled = not autoGiftsEnabled
     if autoGiftsEnabled then
-        giftsBtn.Text = "ENABLED"
+        giftsBtn.Text = "<b>ENABLED</b>"
         giftsBtn.BackgroundColor3 = C_SUCCESS
         task.spawn(autoCollectFreeGifts)
     else
-        giftsBtn.Text = "DISABLED"
+        giftsBtn.Text = "<b>DISABLED</b>"
         giftsBtn.BackgroundColor3 = C_DANGER
     end
 end)
 
 merchantBtn.MouseButton1Click:Connect(function()
     autoMerchantEnabled = not autoMerchantEnabled
-    merchantBtn.Text = autoMerchantEnabled and "ENABLED" or "DISABLED"
+    merchantBtn.Text = autoMerchantEnabled and "<b>ENABLED</b>" or "<b>DISABLED</b>"
     merchantBtn.BackgroundColor3 = autoMerchantEnabled and C_SUCCESS or C_DANGER
+end)
+
+eventBtn.MouseButton1Click:Connect(function()
+    autoJoinEventEnabled = not autoJoinEventEnabled
+    eventBtn.Text = autoJoinEventEnabled and "<b>ENABLED</b>" or "<b>DISABLED</b>"
+    eventBtn.BackgroundColor3 = autoJoinEventEnabled and C_SUCCESS or C_DANGER
+end)
+
+rejoinBtn.MouseButton1Click:Connect(function()
+    rejoinServer()
+end)
+
+hopBtn.MouseButton1Click:Connect(function()
+    serverHop()
 end)
 
 render3dBtn.MouseButton1Click:Connect(function()
     disable3DRendering = not disable3DRendering
     RunService:Set3dRenderingEnabled(not disable3DRendering)
     BlackOverlay.Visible = disable3DRendering
-    render3dBtn.Text = disable3DRendering and "ON (Black Screen)" or "OFF"
+    render3dBtn.Text = disable3DRendering and "<b>ENABLED</b>" or "<b>DISABLED</b>"
     render3dBtn.BackgroundColor3 = disable3DRendering and C_SUCCESS or C_DANGER
 end)
 
 local function executePotatoMode()
     potatoModeEnabled = true
-    potatoBtn.Text = "ON (Applied)"
+    potatoBtn.Text = "<b>ENABLED</b>"
     potatoBtn.BackgroundColor3 = C_SUCCESS
     
     pcall(function()
@@ -902,7 +1909,13 @@ end
 
 potatoBtn.MouseButton1Click:Connect(function()
     if not potatoModeEnabled then
-        showWarning("⚠️ WARNING: POTATO MODE", "Are you sure? This lowers graphics and removes textures permanently for this session. Restart Roblox to revert!", false, executePotatoMode)
+        showConfirmDialog(
+            "🥔 Potato Mode Warning", 
+            "Enabling Potato Mode will remove textures and shadows to maximize performance. Do you want to proceed?", 
+            function()
+                executePotatoMode()
+            end
+        )
     end
 end)
 
@@ -910,10 +1923,9 @@ unloadBtn.MouseButton1Click:Connect(function()
     scriptRunning = false
     antiAfkEnabled = false
     autoMerchantEnabled = false
-    autoCollectEnabled = false
-    autoHatchEnabled = false
     autoGiftsEnabled = false
-    setPlayerFrozen(false)
+    autoJoinEventEnabled = false
+    autoPetsCoinsEventEnabled = false
     
     RunService:Set3dRenderingEnabled(true)
     applyFPSCap(normalFPS)
@@ -923,9 +1935,7 @@ unloadBtn.MouseButton1Click:Connect(function()
 end)
 
 local function autoBuyMerchant()
-    if not autoMerchantEnabled or not scriptRunning then return end
-    local network = ReplicatedStorage:FindFirstChild("Network")
-    if not network then return end
+    if not autoMerchantEnabled or not scriptRunning or not network then return end
     
     local markApproached = network:FindFirstChild("Machines: Mark Approached")
     if markApproached then
@@ -945,49 +1955,57 @@ local function autoBuyMerchant()
     end
 end
 
-local function autoCollectPlots()
-    if not autoCollectEnabled or not scriptRunning or not cachedPlotIdArg then return end
-    local network = ReplicatedStorage:FindFirstChild("Network")
-    if not network then return end
-    
-    local plotsInvoke = network:FindFirstChild("Plots_Invoke")
-    if not plotsInvoke then return end
-
-    for plotId = 1, 10 do
-        if not scriptRunning or not autoCollectEnabled then break end
-        pcall(function()
-            plotsInvoke:InvokeServer(cachedPlotIdArg, "SD_Collect", tostring(plotId))
-        end)
-        task.wait(0.3)
+for _, desc in ipairs(ScreenGui:GetDescendants()) do
+    if desc:IsA("TextLabel") or desc:IsA("TextButton") or desc:IsA("TextBox") then
+        desc.RichText = true
     end
 end
 
-collectBtn.MouseButton1Click:Connect(function()
-    if not autoCollectEnabled then
-        if not cachedPlotIdArg then
-            autoCollectEnabled = false
-            collectBtn.Text = "DISABLED"
-            collectBtn.BackgroundColor3 = C_DANGER
-            showWarning("⚠️ MISSING PLOT ID", "Manually collect 1 plot in-game first! After doing that, press ENABLE again.", true)
-            return
+task.spawn(function()
+    while scriptRunning do
+        if autoJoinEventEnabled then
+            pcall(triggerJoinEvent)
+            task.wait(12) 
+        else
+            task.wait(0.5)
         end
-        autoCollectEnabled = true
-        collectBtn.Text = "ENABLED"
-        collectBtn.BackgroundColor3 = C_SUCCESS
-        task.spawn(autoCollectPlots)
-    else
-        autoCollectEnabled = false
-        collectBtn.Text = "DISABLED"
-        collectBtn.BackgroundColor3 = C_DANGER
     end
 end)
 
 task.spawn(function()
     while scriptRunning do
-        if autoHatchEnabled and currentEggId then
-            doHatchSequence(currentEggId)
+        if autoPetsCoinsEventEnabled then
+            pcall(function()
+                local argsGargantuan = {
+                    [1] = "Gargantuan",
+                    [2] = "Slot1",
+                    [3] = 500000
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Network"):WaitForChild("ZQ_Prolong"):InvokeServer(unpack(argsGargantuan))
+
+                local argsTitanic = {
+                    [1] = "Titanic",
+                    [2] = "Slot1",
+                    [3] = 500000
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Network"):WaitForChild("ZQ_Prolong"):InvokeServer(unpack(argsTitanic))
+
+                local argsHuge = {
+                    [1] = "Huge",
+                    [2] = "Slot1",
+                    [3] = 500000
+                }
+                game:GetService("ReplicatedStorage"):WaitForChild("Network"):WaitForChild("ZQ_Prolong"):InvokeServer(unpack(argsHuge))
+            end)
+            
+            local timer = 0
+            while timer < 900 and autoPetsCoinsEventEnabled and scriptRunning do
+                task.wait(1)
+                timer = timer + 1
+            end
+        else
+            task.wait(0.5)
         end
-        task.wait(0.5)
     end
 end)
 
@@ -1007,7 +2025,6 @@ task.spawn(function()
         
         if antiAfkEnabled then
             pcall(function()
-                local network = ReplicatedStorage:FindFirstChild("Network")
                 if network and network:FindFirstChild("Click") then
                     network.Click:FireServer(
                         Ray.new(Vector3.new(1089.76, 263.22, -2364.07), Vector3.new(-0.012, -0.384, -0.922)),
@@ -1020,25 +2037,594 @@ task.spawn(function()
                 VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Unknown, false, game)
                 
                 if afkStatusLabel and afkStatusLabel.Parent then
-                    afkStatusLabel.Text = "Status: Pulse Sent!"
-                    afkStatusLabel.TextColor3 = Color3.fromRGB(241, 196, 15)
+                    afkStatusLabel.Text = "<b>Status: Pulse Sent!</b>"
+                    afkStatusLabel.TextColor3 = Color3.fromRGB(241, 196, 15) 
+                    
                     task.wait(2)
+                    
                     if antiAfkEnabled and afkStatusLabel and afkStatusLabel.Parent then
-                        afkStatusLabel.Text = "Status: Active"
+                        afkStatusLabel.Text = "<b>Status: Active</b>"
                         afkStatusLabel.TextColor3 = C_SUCCESS
                     end
                 end
             end)
         end
+        
         autoBuyMerchant()
     end
 end)
 
+local autoNearestEggEnabled = false
+local autoSelectedEggEnabled = false
+local selectedEggName = "Garden Egg 1"
+local isEggDropdownOpen = false
+
+createSectionHeader(Tabs.Eggs, "Auto Hatching")
+
+local nearestEggCard = createCard(Tabs.Eggs, "🥚 AUTO HATCH NEAREST EGG", 72)
+createDescriptionLabel(nearestEggCard, "Teleports you to the nearest base egg automatically.")
+local nearestEggBtn = Instance.new("TextButton", nearestEggCard)
+nearestEggBtn.Size = UDim2.new(0.35, 0, 0, 28)
+nearestEggBtn.Position = UDim2.new(0.62, 0, 0, 30)
+nearestEggBtn.BackgroundColor3 = C_DANGER
+nearestEggBtn.Font = FONT_BOLD
+nearestEggBtn.RichText = true
+nearestEggBtn.Text = "<b>DISABLED</b>"
+nearestEggBtn.TextColor3 = C_TEXT
+nearestEggBtn.TextSize = 11
+Instance.new("UICorner", nearestEggBtn).CornerRadius = UDim.new(0, 6)
+
+local selectedEggCard = createCard(Tabs.Eggs, "🎯 AUTO HATCH SELECTED EGG", 72)
+createDescriptionLabel(selectedEggCard, "Teleports you to the specific selected base egg.")
+local selectedEggBtn = Instance.new("TextButton", selectedEggCard)
+selectedEggBtn.Size = UDim2.new(0.35, 0, 0, 28)
+selectedEggBtn.Position = UDim2.new(0.62, 0, 0, 30)
+selectedEggBtn.BackgroundColor3 = C_DANGER
+selectedEggBtn.Font = FONT_BOLD
+selectedEggBtn.RichText = true
+selectedEggBtn.Text = "<b>DISABLED</b>"
+selectedEggBtn.TextColor3 = C_TEXT
+selectedEggBtn.TextSize = 11
+Instance.new("UICorner", selectedEggBtn).CornerRadius = UDim.new(0, 6)
+
+local dropdownEggCard = createCard(Tabs.Eggs, "📂 TARGET EGG TYPE", 72)
+createDescriptionLabel(dropdownEggCard, "Select which Garden Egg to target.")
+local dropdownDisplayBtn = Instance.new("TextButton", dropdownEggCard)
+dropdownDisplayBtn.Size = UDim2.new(0.38, 0, 0, 28)
+dropdownDisplayBtn.Position = UDim2.new(0.60, 0, 0, 30)
+dropdownDisplayBtn.BackgroundColor3 = C_STATBOX
+dropdownDisplayBtn.Font = FONT_MEDIUM
+dropdownDisplayBtn.RichText = true
+dropdownDisplayBtn.Text = "<b>" .. selectedEggName .. " ▼</b>"
+dropdownDisplayBtn.TextColor3 = C_SUBTEXT
+dropdownDisplayBtn.TextSize = 9
+Instance.new("UICorner", dropdownDisplayBtn).CornerRadius = UDim.new(0, 6)
+
+local dropdownListContainer = Instance.new("ScrollingFrame", Tabs.Eggs)
+dropdownListContainer.Name = "EggDropdownList"
+dropdownListContainer.Size = UDim2.new(1, 0, 0, 130)
+dropdownListContainer.BackgroundColor3 = C_CONTAINERS
+dropdownListContainer.BorderSizePixel = 0
+dropdownListContainer.Visible = false
+dropdownListContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
+dropdownListContainer.ScrollBarThickness = 3
+Instance.new("UICorner", dropdownListContainer).CornerRadius = UDim.new(0, 6)
+table.insert(containerFramesList, dropdownListContainer)
+
+local dropdownLayout = Instance.new("UIListLayout", dropdownListContainer)
+dropdownLayout.SortOrder = Enum.SortOrder.LayoutOrder
+dropdownLayout.Padding = UDim.new(0, 3)
+
+local function populateEggDropdown()
+    for _, child in ipairs(dropdownListContainer:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+
+    local foundEggs = {}
+    for i = 1, 12 do
+        table.insert(foundEggs, "Garden Egg " .. i)
+    end
+
+    for _, eggName in ipairs(foundEggs) do
+        local optionBtn = Instance.new("TextButton", dropdownListContainer)
+        optionBtn.Size = UDim2.new(1, -4, 0, 26)
+        optionBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 38)
+        optionBtn.Font = FONT_MEDIUM
+        optionBtn.RichText = true
+        optionBtn.Text = "<b>" .. eggName .. "</b>"
+        optionBtn.TextColor3 = C_TEXT
+        optionBtn.TextSize = 10
+        Instance.new("UICorner", optionBtn).CornerRadius = UDim.new(0, 4)
+
+        optionBtn.MouseButton1Click:Connect(function()
+            selectedEggName = eggName
+            dropdownDisplayBtn.Text = "<b>" .. eggName .. " ▼</b>"
+            dropdownListContainer.Visible = false
+            isEggDropdownOpen = false
+        end)
+    end
+    dropdownListContainer.CanvasSize = UDim2.new(0, 0, 0, #foundEggs * 29)
+end
+
+populateEggDropdown()
+
+dropdownDisplayBtn.MouseButton1Click:Connect(function()
+    isEggDropdownOpen = not isEggDropdownOpen
+    dropdownListContainer.Visible = isEggDropdownOpen
+end)
+
+nearestEggBtn.MouseButton1Click:Connect(function()
+    autoNearestEggEnabled = not autoNearestEggEnabled
+    if autoNearestEggEnabled then
+        autoSelectedEggEnabled = false
+        selectedEggBtn.Text = "<b>DISABLED</b>"
+        selectedEggBtn.BackgroundColor3 = C_DANGER
+        
+        nearestEggBtn.Text = "<b>ENABLED</b>"
+        nearestEggBtn.BackgroundColor3 = C_SUCCESS
+    else
+        nearestEggBtn.Text = "<b>DISABLED</b>"
+        nearestEggBtn.BackgroundColor3 = C_DANGER
+    end
+end)
+
+selectedEggBtn.MouseButton1Click:Connect(function()
+    autoSelectedEggEnabled = not autoSelectedEggEnabled
+    if autoSelectedEggEnabled then
+        autoNearestEggEnabled = false
+        nearestEggBtn.Text = "<b>DISABLED</b>"
+        nearestEggBtn.BackgroundColor3 = C_DANGER
+        
+        selectedEggBtn.Text = "<b>ENABLED</b>"
+        selectedEggBtn.BackgroundColor3 = C_SUCCESS
+    else
+        selectedEggBtn.Text = "<b>DISABLED</b>"
+        selectedEggBtn.BackgroundColor3 = C_DANGER
+    end
+end)
+
+local function teleportToSelectedOrNearestEgg()
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+    
+    local hrp = character.HumanoidRootPart
+    local targetPos = nil
+    local shortestDist = math.huge 
+    local targetClean = selectedEggName and selectedEggName:lower():gsub("%s+", "") or ""
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and obj.Name == "Center" then
+            local eggModel = obj.Parent
+            
+            if eggModel and (eggModel:FindFirstChild("Egg") or eggModel:FindFirstChild("EggLock") or eggModel:FindFirstChild("PriceFrame")) then
+                local isMatch = false
+
+                if autoNearestEggEnabled then
+                    isMatch = true
+                elseif autoSelectedEggEnabled and targetClean ~= "" then
+                    if eggModel.Name:lower():gsub("%s+", ""):find(targetClean) then
+                        isMatch = true
+                    else
+                        for _, desc in ipairs(eggModel:GetDescendants()) do
+                            if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+                                local txt = desc.Text:lower():gsub("%s+", "")
+                                if txt ~= "" and txt:find(targetClean) then
+                                    isMatch = true
+                                    break
+                                end
+                            elseif desc.Name:lower():gsub("%s+", ""):find(targetClean) then
+                                isMatch = true
+                                break
+                            end
+                        end
+                    end
+                end
+
+                if isMatch then
+                    local pos = obj.Position
+                    local dist = (hrp.Position - pos).Magnitude
+
+                    if dist < shortestDist then
+                        shortestDist = dist
+                        targetPos = pos
+                    end
+                end
+            end
+        end
+    end
+
+    if targetPos then
+        hrp.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
+    end
+end
+
 task.spawn(function()
     while scriptRunning do
-        if autoCollectEnabled then
-            autoCollectPlots()
+        if autoNearestEggEnabled or autoSelectedEggEnabled then
+            pcall(function()
+                teleportToSelectedOrNearestEgg()
+            end)
         end
-        task.wait(60)
+        task.wait(0.2)
     end
+end)
+
+createSectionHeader(Tabs.Upgrades, "Auto Upgrades Manager")
+
+local upgradeStates = {
+    ["Better Eggs!"] = false,
+    ["More Coins!"] = false,
+    ["More Damage!"] = false,
+    ["Faster Attacks!"] = false,
+    ["Faster Crop Growth!"] = false,
+    ["Bigger Harvest!"] = false,
+    ["More Seeds!"] = false,
+    ["Better Luck!"] = false
+}
+
+local function createUpgradeToggleCard(parent, upgradeTitle)
+    local card = createCard(parent, upgradeTitle, 72)
+    createDescriptionLabel(card, "Automatically buys " .. upgradeTitle .. " upgrade.")
+    
+    local toggleBtn = Instance.new("TextButton", card)
+    toggleBtn.Size = UDim2.new(0.35, 0, 0, 28)
+    toggleBtn.Position = UDim2.new(0.62, 0, 0, 30)
+    toggleBtn.BackgroundColor3 = C_DANGER
+    toggleBtn.Font = FONT_BOLD
+    toggleBtn.RichText = true
+    toggleBtn.Text = "<b>DISABLED</b>"
+    toggleBtn.TextColor3 = C_TEXT
+    toggleBtn.TextSize = 11
+    Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
+
+    toggleBtn.MouseButton1Click:Connect(function()
+        local newState = not upgradeStates[upgradeTitle]
+        upgradeStates[upgradeTitle] = newState
+        
+        if newState then
+            toggleBtn.Text = "<b>ENABLED</b>"
+            toggleBtn.BackgroundColor3 = C_SUCCESS
+        else
+            toggleBtn.Text = "<b>DISABLED</b>"
+            toggleBtn.BackgroundColor3 = C_DANGER
+        end
+    end)
+end
+
+createUpgradeToggleCard(Tabs.Upgrades, "Better Eggs!")
+createUpgradeToggleCard(Tabs.Upgrades, "More Coins!")
+createUpgradeToggleCard(Tabs.Upgrades, "More Damage!")
+createUpgradeToggleCard(Tabs.Upgrades, "Faster Attacks!")
+createUpgradeToggleCard(Tabs.Upgrades, "Faster Crop Growth!")
+createUpgradeToggleCard(Tabs.Upgrades, "Bigger Harvest!")
+createUpgradeToggleCard(Tabs.Upgrades, "More Seeds!")
+createUpgradeToggleCard(Tabs.Upgrades, "Better Luck!")
+
+local upgradeRemoteNames = {
+    ["Better Eggs!"] = "GardenBetterEggs",
+    ["More Coins!"] = "GardenMoreCoins",
+    ["More Damage!"] = "GardenMoreDamage",
+    ["Faster Attacks!"] = "GardenFasterAttacks",
+    ["Faster Crop Growth!"] = "GardenFasterCrops",
+    ["Bigger Harvest!"] = "GardenBiggerHarvest",
+    ["More Seeds!"] = "GardenMoreSeeds",
+    ["Better Luck!"] = "GardenBetterLuck"
+}
+
+task.spawn(function()
+    while scriptRunning do
+        pcall(function()
+            if network then
+                local purchaseRemote = network:FindFirstChild("EventUpgrades: Purchase")
+                
+                if purchaseRemote then
+                    for name, active in pairs(upgradeStates) do
+                        if active and scriptRunning then
+                            local remoteArg = upgradeRemoteNames[name]
+                            if remoteArg then
+                                local args = {
+                                    [1] = remoteArg
+                                }
+                                purchaseRemote:InvokeServer(unpack(args))
+                            end                   
+                            task.wait(0.3)
+                        end
+                    end
+                end
+            end
+        end)
+        task.wait(5)
+    end
+end)
+
+local SETTINGS_CONFIG_FILE = "KHub_UserConfigs.json"
+local AUTO_LOAD_CONFIG_FILE = "KHub_AutoLoadConfig.txt"
+
+local savedConfigs = {
+    ["Default Config"] = {
+        antiAfk = true,
+        autoMerchant = false,
+        autoGifts = false,
+        autoJoinEvent = false,
+        autoPetsCoinsEvent = false,
+        customFPS = 1,
+        isCustomFPS = false
+    }
+}
+
+local autoLoadConfigName = ""
+
+local function loadConfigsFromFile()
+    if readfile and isfile and isfile(SETTINGS_CONFIG_FILE) then
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(readfile(SETTINGS_CONFIG_FILE))
+        end)
+        if success and type(result) == "table" then
+            for name, data in pairs(result) do
+                savedConfigs[name] = data
+            end
+        end
+    end
+    
+    if readfile and isfile and isfile(AUTO_LOAD_CONFIG_FILE) then
+        local success, result = pcall(function()
+            return readfile(AUTO_LOAD_CONFIG_FILE)
+        end)
+        if success and result then
+            autoLoadConfigName = result:gsub("^%s*(.-)%s*$", "%1") 
+        end
+    end
+end
+
+local function saveConfigsToFile()
+    if writefile then
+        pcall(function()
+            writefile(SETTINGS_CONFIG_FILE, HttpService:JSONEncode(savedConfigs))
+        end)
+    end
+end
+
+loadConfigsFromFile()
+
+local function applyConfigData(configData)
+    if not configData then return end
+    
+    if configData.antiAfk ~= nil then
+        antiAfkEnabled = configData.antiAfk
+    end
+    if configData.autoMerchant ~= nil then
+        autoMerchantEnabled = configData.autoMerchant
+        merchantBtn.Text = autoMerchantEnabled and "<b>ENABLED</b>" or "<b>DISABLED</b>"
+        merchantBtn.BackgroundColor3 = autoMerchantEnabled and C_SUCCESS or C_DANGER
+    end
+    if configData.autoGifts ~= nil then
+        autoGiftsEnabled = configData.autoGifts
+        giftsBtn.Text = autoGiftsEnabled and "<b>ENABLED</b>" or "<b>DISABLED</b>"
+        giftsBtn.BackgroundColor3 = autoGiftsEnabled and C_SUCCESS or C_DANGER
+        if autoGiftsEnabled then task.spawn(autoCollectFreeGifts) end
+    end
+    if configData.autoJoinEvent ~= nil then
+        autoJoinEventEnabled = configData.autoJoinEvent
+        eventBtn.Text = autoJoinEventEnabled and "<b>ENABLED</b>" or "<b>DISABLED</b>"
+        eventBtn.BackgroundColor3 = autoJoinEventEnabled and C_SUCCESS or C_DANGER
+    end
+    if configData.autoPetsCoinsEvent ~= nil then
+        autoPetsCoinsEventEnabled = configData.autoPetsCoinsEvent
+        petsCoinsBtn.Text = autoPetsCoinsEventEnabled and "<b>ENABLED</b>" or "<b>DISABLED</b>"
+        petsCoinsBtn.BackgroundColor3 = autoPetsCoinsEventEnabled and C_SUCCESS or C_DANGER
+    end
+    if configData.customFPS ~= nil then
+        customFPS = configData.customFPS
+        fpsInput.Text = tostring(customFPS)
+    end
+    if configData.isCustomFPS ~= nil then
+        isCustomFPS = configData.isCustomFPS
+        if isCustomFPS then
+            applyFPSCap(customFPS)
+            fpsBtn.Text = "<b>FPS: " .. customFPS .. "</b>"
+            fpsBtn.BackgroundColor3 = C_DANGER
+        else
+            applyFPSCap(normalFPS)
+            fpsBtn.Text = "<b>FPS: Normal</b>"
+            fpsBtn.BackgroundColor3 = C_BUTTON
+        end
+    end
+end
+
+if autoLoadConfigName ~= "" and savedConfigs[autoLoadConfigName] then
+    task.spawn(function()
+        task.wait(0.5) 
+        applyConfigData(savedConfigs[autoLoadConfigName])
+        sendNotification("Auto-Load Config", "Loaded config on start: " .. autoLoadConfigName, 3)
+    end)
+end
+
+createSectionHeader(Tabs.Settings, "Configurations Management")
+
+local configCard = createCard(Tabs.Settings, "⚙️ SCRIPT CONFIGURATIONS", 235)
+
+local configSelectScroll = Instance.new("ScrollingFrame", configCard)
+configSelectScroll.Size = UDim2.new(0.58, -10, 0, 134)
+configSelectScroll.Position = UDim2.new(0, 12, 0, 52)
+configSelectScroll.BackgroundColor3 = C_CONTAINERS
+configSelectScroll.BorderSizePixel = 0
+configSelectScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+configSelectScroll.ScrollBarThickness = 3
+Instance.new("UICorner", configSelectScroll).CornerRadius = UDim.new(0, 6)
+table.insert(containerFramesList, configSelectScroll)
+
+local configSelectPadding = Instance.new("UIPadding", configSelectScroll)
+configSelectPadding.PaddingTop = UDim.new(0, 8)
+
+local configListLayout = Instance.new("UIListLayout", configSelectScroll)
+configListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+configListLayout.Padding = UDim.new(0, 3)
+
+local loadConfigBtn = Instance.new("TextButton", configCard)
+loadConfigBtn.Size = UDim2.new(0.38, 0, 0, 28)
+loadConfigBtn.Position = UDim2.new(0.60, 0, 0, 48)
+loadConfigBtn.BackgroundColor3 = C_BUTTON
+table.insert(staticAccentButtonsList, loadConfigBtn)
+loadConfigBtn.Font = FONT_BOLD
+loadConfigBtn.RichText = true
+loadConfigBtn.Text = "<b>LOAD CONFIG</b>"
+loadConfigBtn.TextColor3 = C_TEXT
+loadConfigBtn.TextSize = 10
+Instance.new("UICorner", loadConfigBtn).CornerRadius = UDim.new(0, 6)
+
+local saveConfigBtn = Instance.new("TextButton", configCard)
+saveConfigBtn.Size = UDim2.new(0.38, 0, 0, 28)
+saveConfigBtn.Position = UDim2.new(0.60, 0, 0, 80)
+saveConfigBtn.BackgroundColor3 = C_SUCCESS
+saveConfigBtn.Font = FONT_BOLD
+saveConfigBtn.RichText = true
+saveConfigBtn.Text = "<b>SAVE CONFIG</b>"
+saveConfigBtn.TextColor3 = C_TEXT
+saveConfigBtn.TextSize = 10
+Instance.new("UICorner", saveConfigBtn).CornerRadius = UDim.new(0, 6)
+
+local autoLoadToggleBtn = Instance.new("TextButton", configCard)
+autoLoadToggleBtn.Size = UDim2.new(0.38, 0, 0, 28)
+autoLoadToggleBtn.Position = UDim2.new(0.60, 0, 0, 112)
+autoLoadToggleBtn.BackgroundColor3 = (autoLoadConfigName ~= "") and C_SUCCESS or Color3.fromRGB(60, 60, 75)
+autoLoadToggleBtn.Font = FONT_BOLD
+autoLoadToggleBtn.RichText = true
+autoLoadToggleBtn.Text = (autoLoadConfigName ~= "") and "<b>AUTO-LOAD: ON</b>" or "<b>AUTO-LOAD: OFF</b>"
+autoLoadToggleBtn.TextColor3 = C_TEXT
+autoLoadToggleBtn.TextSize = 9
+Instance.new("UICorner", autoLoadToggleBtn).CornerRadius = UDim.new(0, 6)
+
+local deleteConfigBtn = Instance.new("TextButton", configCard)
+deleteConfigBtn.Size = UDim2.new(0.38, 0, 0, 28)
+deleteConfigBtn.Position = UDim2.new(0.60, 0, 0, 144)
+deleteConfigBtn.BackgroundColor3 = C_DANGER
+deleteConfigBtn.Font = FONT_BOLD
+deleteConfigBtn.RichText = true
+deleteConfigBtn.Text = "<b>DELETE CONFIG</b>"
+deleteConfigBtn.TextColor3 = C_TEXT
+deleteConfigBtn.TextSize = 10
+Instance.new("UICorner", deleteConfigBtn).CornerRadius = UDim.new(0, 6)
+
+rebuildConfigSelectionList = function()
+    for _, child in ipairs(configSelectScroll:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+
+    local count = 0
+    for name, _ in pairs(savedConfigs) do
+        count = count + 1
+        local itemBtn = Instance.new("TextButton", configSelectScroll)
+        itemBtn.Size = UDim2.new(1, -4, 0, 24)
+        itemBtn.BackgroundColor3 = (selectedConfigName == name) and C_ACCENT or C_CONFIG_SELECTION
+        itemBtn.Font = FONT_MEDIUM
+        itemBtn.RichText = true
+        itemBtn.Text = "<b>" .. name .. "</b>"
+        itemBtn.TextColor3 = C_TEXT
+        itemBtn.TextSize = 10
+        Instance.new("UICorner", itemBtn).CornerRadius = UDim.new(0, 4)
+
+        configButtonsMap[name] = itemBtn
+
+        itemBtn.MouseButton1Click:Connect(function()
+            selectedConfigName = name
+            for n, btn in pairs(configButtonsMap) do
+                if btn and btn.Parent then
+                    btn.BackgroundColor3 = (n == selectedConfigName) and C_ACCENT or C_CONFIG_SELECTION
+                end
+            end
+        end)
+    end
+    configSelectScroll.CanvasSize = UDim2.new(0, 0, 0, (count * 28) + 4)
+end
+
+rebuildConfigSelectionList()
+
+loadConfigBtn.MouseButton1Click:Connect(function()
+    local configData = savedConfigs[selectedConfigName]
+    if configData then
+        applyConfigData(configData)
+        sendNotification("Config Loaded", "Loaded configuration: " .. selectedConfigName, 3)
+    end
+end)
+
+saveConfigBtn.MouseButton1Click:Connect(function()
+    showInputDialog(
+        "💾 Save Configuration",
+        "Enter a name for your configuration:",
+        "My Config",
+        function(configName)
+            if configName and configName ~= "" then
+                savedConfigs[configName] = {
+                    antiAfk = antiAfkEnabled,
+                    autoMerchant = autoMerchantEnabled,
+                    autoGifts = autoGiftsEnabled,
+                    autoJoinEvent = autoJoinEventEnabled,
+                    autoPetsCoinsEvent = autoPetsCoinsEventEnabled,
+                    customFPS = customFPS,
+                    isCustomFPS = isCustomFPS
+                }
+                saveConfigsToFile()
+                selectedConfigName = configName
+                rebuildConfigSelectionList()
+                sendNotification("Config Saved", "Successfully saved config: " .. configName, 3)
+            else
+                sendNotification("Error", "Configuration name cannot be empty!", 3)
+            end
+        end,
+        function() end
+    )
+end)
+
+autoLoadToggleBtn.MouseButton1Click:Connect(function()
+    if autoLoadConfigName ~= "" then
+        autoLoadConfigName = ""
+        autoLoadToggleBtn.Text = "<b>AUTO-LOAD: OFF</b>"
+        autoLoadToggleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+        if writefile and isfile and isfile(AUTO_LOAD_CONFIG_FILE) then
+            pcall(function() writefile(AUTO_LOAD_CONFIG_FILE, "") end)
+        end
+        sendNotification("Auto-Load", "Disabled auto-load config.", 3)
+    else
+        if selectedConfigName ~= "" then
+            autoLoadConfigName = selectedConfigName
+            autoLoadToggleBtn.Text = "<b>AUTO-LOAD: ON</b>"
+            autoLoadToggleBtn.BackgroundColor3 = C_SUCCESS
+            if writefile then
+                pcall(function() writefile(AUTO_LOAD_CONFIG_FILE, autoLoadConfigName) end)
+            end
+            sendNotification("Auto-Load", "Set auto-load config to: " .. autoLoadConfigName, 3)
+        else
+            sendNotification("Error", "No configuration selected!", 3)
+        end
+    end
+end)
+
+deleteConfigBtn.MouseButton1Click:Connect(function()
+    if not selectedConfigName then
+        sendNotification("Error", "No configuration selected!", 3)
+        return
+    end
+
+    showConfirmDialogCustom(
+        "🗑️ Delete Configuration",
+        "Are you sure you want to delete the configuration '" .. selectedConfigName .. "'? This action cannot be undone.",
+        function()
+            if savedConfigs[selectedConfigName] then
+                savedConfigs[selectedConfigName] = nil
+                saveConfigsToFile()
+                
+                local nextConfig = next(savedConfigs)
+                if nextConfig then
+                    selectedConfigName = nextConfig
+                else
+                    selectedConfigName = ""
+                end
+                
+                rebuildConfigSelectionList()
+                sendNotification("Config Deleted", "Successfully deleted configuration.", 3)
+            end
+        end
+    )
 end)
